@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.6
+
+### Added
+- PyPI publish workflow (`.github/workflows/publish.yml`) using trusted publishing, so no API token is stored in the repository.
+
+### Notes
+- Library code is unchanged from 0.5.5. This release only adds the publishing workflow and the version bump.
+
+
 ## 0.5.5
 
 ### Added
@@ -13,7 +22,7 @@
 - Rebuilt this changelog, which had stray tool-output lines committed.
 
 ### Verification
-- Test suite passes on Python 3.11, 3.12 and 3.13 in CI (run 44349760462).
+- Test suite passes on Python 3.11, 3.12 and 3.13 in CI (run 44351793227).
 - Not yet verified for this release: native and Python fallback parity tests, stress and malformed-request tests, Windows and macOS wheel builds, and benchmark results against aiohttp.
 
 ### Known issues

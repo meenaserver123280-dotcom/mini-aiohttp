@@ -13,7 +13,7 @@ from .security import RateLimiter, cors, ip_policy, require_json, security_heade
 from .server import Server
 from .websocket import WebSocket, WebSocketError, WebSocketServer
 
-__version__ = "0.5.5"
+__version__ = "0.5.6"
 __all__ = [
     "ClientSession", "ClientError", "CookieJar", "Server", "Request", "Response",
     "UploadedFile", "RateLimiter", "cors", "ip_policy", "require_json",
