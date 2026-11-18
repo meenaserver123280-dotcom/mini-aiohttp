@@ -13,6 +13,7 @@ from .response import Request, Response, check_header
 log = logging.getLogger("mini_aiohttp.server")
 
 MAX_LINE = 8 * 1024  # max size of one request or header line
+MAX_HEADER_BYTES = 256 * 1024  # bounded aggregate request-head size
 MAX_HEADER_COUNT = 100
 STATIC_CHUNK = 64 * 1024
 _TOKEN_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
@@ -347,19 +348,28 @@ class Server:
             headers[key] = value.strip()
 
     async def _read_request(self, reader, writer=None) -> Request | None:
-        # RFC 9112 section 2.2: ignore empty lines received before a request line.
+        # Read the complete request head in one StreamReader operation. Parsing each
+        # header with a separate readuntil() adds avoidable coroutine/await overhead.
         while True:
             try:
-                line = await _readline(reader)
+                head = await reader.readuntil(b"\\r\\n\\r\\n")
             except asyncio.IncompleteReadError as exc:
                 if not exc.partial:
                     return None
                 raise
-            if line not in (b"\r\n", b"\n"):
+            except asyncio.LimitOverrunError:
+                raise BadRequest(431, "Request headers too large")
+
+            lines = head[:-4].split(b"\\r\\n")
+            while lines and not lines[0]:
+                lines.pop(0)  # RFC 9112: ignore empty lines before the request line.
+            if lines:
                 break
 
+        if any(len(raw) + 2 > MAX_LINE for raw in lines):
+            raise BadRequest(431, "Line too long")
         try:
-            method, target, version = line.decode("latin-1").rstrip("\r\n").split(" ")
+            method, target, version = lines[0].decode("latin-1").split(" ")
         except ValueError:
             raise BadRequest(400, "Malformed request line")
         if not _METHOD_RE.fullmatch(method):
@@ -368,7 +378,25 @@ class Server:
             raise BadRequest(505, "HTTP version not supported")
         path, query = _parse_target(target)
 
-        headers = await self._read_headers(reader)
+        headers: dict = {}
+        header_lines = lines[1:]
+        if len(header_lines) > MAX_HEADER_COUNT:
+            raise BadRequest(431, "Too many headers")
+        for raw in header_lines:
+            if raw[:1] in (b" ", b"\\t"):
+                raise BadRequest(400, "Obsolete line folding is not allowed")
+            text = raw.decode("latin-1")
+            name, sep, value = text.partition(":")
+            # No whitespace allowed in the name: "Host : x" is a classic smuggling trick.
+            if not sep or not _TOKEN_RE.fullmatch(name):
+                raise BadRequest(400, "Malformed header")
+            if "\\x00" in value:
+                raise BadRequest(400, "Invalid header value")
+            key = name.lower()
+            if key in headers and key in _SINGLETON_HEADERS:
+                raise BadRequest(400, f"Duplicate {name} header")
+            headers[key] = value.strip()
+
         has_transfer_encoding = "transfer-encoding" in headers
         has_content_length = "content-length" in headers
         if has_transfer_encoding and has_content_length:
@@ -380,7 +408,7 @@ class Server:
             and version == "HTTP/1.1"
             and headers.get("expect", "").lower() == "100-continue"
         ):
-            writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")
+            writer.write(b"HTTP/1.1 100 Continue\\r\\n\\r\\n")
             await writer.drain()
 
         if has_transfer_encoding:
@@ -530,7 +558,7 @@ class Server:
             host,
             port,
             backlog=self.backlog,
-            limit=MAX_LINE,
+            limit=MAX_HEADER_BYTES,
             reuse_port=reuse_port,
             ssl=ssl,
         )
