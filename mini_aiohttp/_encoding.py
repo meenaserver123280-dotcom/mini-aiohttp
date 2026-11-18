@@ -23,6 +23,10 @@ def accept_encoding_value() -> str:
 ACCEPT_ENCODING = accept_encoding_value()
 
 
+class _MalformedCompressed(Exception):
+    """Internal signal used to retry raw-deflate after a zlib-wrapper failure."""
+
+
 def _encodings_of(header_value: str) -> list:
     parts = [p.strip().lower() for p in (header_value or "").split(",")]
     return [p for p in parts if p and p != "identity"]
@@ -62,7 +66,7 @@ class _Step:
             try:
                 return self._record_output(self._z.decompress(data))
             except zlib.error as exc:
-                raise ClientError("Malformed compressed response body") from exc
+                raise _MalformedCompressed from exc
 
         remaining = self.max_output_size - self._output_size
         try:
@@ -91,16 +95,14 @@ class _Step:
             return self._record_output(output)
         try:
             return self._zlib_feed(data)
-        except ClientError as exc:
-            if not self._raw_fallback or "Malformed compressed" not in str(exc):
-                raise
+        except _MalformedCompressed as exc:
+            if not self._raw_fallback:
+                raise ClientError("Malformed compressed response body") from exc
             self._raw_fallback = False
             self._z = zlib.decompressobj(-zlib.MAX_WBITS)
             try:
                 return self._zlib_feed(data)
-            except ClientError as raw_exc:
-                if "max_response_size" in str(raw_exc):
-                    raise
+            except _MalformedCompressed as raw_exc:
                 raise ClientError("Malformed compressed response body") from raw_exc
 
     def flush(self) -> bytes:
