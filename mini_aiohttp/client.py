@@ -531,7 +531,7 @@ class ClientSession:
             )
             decoder = None
             if method != "HEAD" and status not in (204, 304):
-                candidate = ContentDecoder(headers.get("content-encoding"))
+                candidate = ContentDecoder(headers.get("content-encoding"), max_output_size=self.max_response_size)
                 if candidate.active:
                     decoder = candidate
                     headers.pop("content-encoding", None)
