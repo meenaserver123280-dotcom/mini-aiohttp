@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.3
+
+### Fixed
+- Streamed responses now enforce the cumulative decoded size limit (`max_response_size`), including decompressed bodies.
+- README version references are synchronized with package metadata.
+
+### Changed
+- Minimum supported Python version is now 3.11. Python 3.9 and 3.10 are no longer supported, because HTTPS proxy tunnels rely on `StreamWriter.start_tls()`, which requires 3.11+.
+
 ## 0.5.0
 
 ### Added

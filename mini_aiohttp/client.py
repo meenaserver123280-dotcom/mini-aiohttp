@@ -91,9 +91,16 @@ class _StreamBody:
         self._decoder = decoder
         self._done = False
         self._ended = False
+        self._size = 0  # cumulative decoded bytes handed to the caller
 
     def __aiter__(self):
         return self
+
+    def _check_chunk_size(self, chunk: bytes) -> None:
+        if chunk:
+            new_size = self._size + len(chunk)
+            self._session._check_size(new_size)
+            self._size = new_size
 
     async def __anext__(self):
         while not self._ended:
@@ -101,10 +108,12 @@ class _StreamBody:
                 chunk = await self._gen.__anext__()
                 if self._decoder is not None:
                     chunk = self._decoder.feed(chunk)
+                self._check_chunk_size(chunk)
             except StopAsyncIteration:
                 self._ended = True
                 try:
                     tail = self._decoder.finish() if self._decoder is not None else b""
+                    self._check_chunk_size(tail)
                 except BaseException:
                     self._finish(complete=False)
                     raise
