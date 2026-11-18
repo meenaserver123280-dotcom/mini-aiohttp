@@ -1,6 +1,6 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 fn latin1(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| char::from(*byte)).collect()
@@ -80,8 +80,53 @@ fn parse_request_head(data: &Bound<'_, PyBytes>) -> PyResult<(String, String, St
     parse_inner(data.as_bytes()).map_err(PyValueError::new_err)
 }
 
+
+#[pyfunction]
+fn serialize_response(
+    py: Python<'_>,
+    status: u16,
+    reason: &str,
+    headers: &Bound<'_, PyDict>,
+    cookies: &Bound<'_, PyList>,
+    body: &Bound<'_, PyBytes>,
+    keep_alive: bool,
+) -> PyResult<Py<PyBytes>> {
+    let mut output = Vec::with_capacity(body.as_bytes().len() + 256);
+    output.extend_from_slice(format!("HTTP/1.1 {} {}\\r\\n", status, reason).as_bytes());
+    for (key, value) in headers.iter() {
+        let name: String = key.extract()?;
+        let value: String = value.extract()?;
+        let mut title = Vec::with_capacity(name.len());
+        let mut upper = true;
+        for byte in name.bytes() {
+            if byte == b'-' {
+                title.push(byte);
+                upper = true;
+            } else {
+                title.push(if upper { byte.to_ascii_uppercase() } else { byte });
+                upper = false;
+            }
+        }
+        output.extend_from_slice(&title);
+        output.extend_from_slice(b": ");
+        output.extend_from_slice(value.as_bytes());
+        output.extend_from_slice(b"\\r\\n");
+    }
+    for cookie in cookies.iter() {
+        let value: String = cookie.extract()?;
+        output.extend_from_slice(b"Set-Cookie: ");
+        output.extend_from_slice(value.as_bytes());
+        output.extend_from_slice(b"\\r\\n");
+    }
+    output.extend_from_slice(b"\\r\\n");
+    output.extend_from_slice(body.as_bytes());
+    let _ = keep_alive;
+    Ok(PyBytes::new(py, &output).unbind())
+}
+
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_request_head, module)?)?;
+    module.add_function(wrap_pyfunction!(serialize_response, module)?)?;
     Ok(())
 }

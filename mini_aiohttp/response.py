@@ -8,6 +8,11 @@ from urllib.parse import parse_qs
 from . import _optional
 from .multipart import parse_multipart
 
+try:
+    from ._native import serialize_response as _native_serialize_response
+except ImportError:  # Optional Rust acceleration.
+    _native_serialize_response = None
+
 REASONS = {
     200: "OK",
     201: "Created",
@@ -165,7 +170,12 @@ class Response:
         # Middleware may have changed headers after __init__, so validate again.
         for name, value in headers.items():
             check_header(name, value)
-        head = [f"HTTP/1.1 {self.status} {REASONS.get(self.status, 'Unknown')}"]
+        reason = REASONS.get(self.status, "Unknown")
+        if _native_serialize_response is not None:
+            return _native_serialize_response(
+                self.status, reason, headers, self._out_set_cookies, self.body, keep_alive
+            )
+        head = [f"HTTP/1.1 {self.status} {reason}"]
         head += [f"{k.title()}: {v}" for k, v in headers.items()]
         head += [f"Set-Cookie: {c}" for c in self._out_set_cookies]
         return ("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + self.body
