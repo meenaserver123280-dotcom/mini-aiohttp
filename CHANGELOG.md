@@ -1,8 +1,8 @@
 ## Unreleased
 
-- Add an optional Rust/PyO3 HTTP request-head parser with a pure-Python fallback.
+- Add optional Rust/PyO3 request-head parsing and buffered response serialization with pure-Python fallbacks.
 - Use native parsing without creating intermediate Python line lists when the extension is available.
-- Add native parser build verification to CI and repeat/median benchmark runs.
+- Add native extension build verification to CI and repeat/median server benchmarks.
 
 --- FILE SHA: 4d49a731849f5486cc9a351bb7b2f2db8923c393 ---
 # Changelog
