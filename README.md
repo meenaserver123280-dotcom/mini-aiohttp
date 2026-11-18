@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.5.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio.
+**mini-aiohttp v0.5.3** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio.
 
 Designed for simplicity, performance, flexibility and security. The core has zero runtime dependencies; faster or extra features are opt-in extras.
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.5.0-green)](https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.0)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/Version-0.5.3-green)](https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.3)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 ---
@@ -77,6 +77,8 @@ Core (no dependencies):
 pip install mini-aiohttp
 ```
 
+Requires Python 3.11 or newer.
+
 Optional extras:
 
 | Extra | What it adds |
@@ -103,7 +105,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.5.0
+pip install mini-aiohttp==0.5.3
 ```
 
 Upgrade an existing installation:
@@ -135,7 +137,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.5.0"
+        "version": "0.5.3"
     })
 
 @app.route("/hello/{name}")
@@ -342,7 +344,7 @@ python -m twine check dist/*
 
 | Component | Support |
 |---|---|
-| Python | 3.9+ |
+| Python | 3.11+ |
 | Type hints | Yes (`py.typed`) |
 | HTTP/1.1 | Yes |
 | HTTPS Server | Yes |
@@ -378,7 +380,7 @@ python -m twine check dist/*
 ## 📚 Links
 
 - **GitHub Repository:** https://github.com/hostunio16-ops/mini-aiohttp
-- **Latest Release:** https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.0
+- **Latest Release:** https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.3
 - **PyPI Package:** https://pypi.org/project/mini-aiohttp/
 - **GitHub Actions:** https://github.com/hostunio16-ops/mini-aiohttp/actions
 
@@ -390,6 +392,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.5.0**
+**mini-aiohttp v0.5.3**
 
 *Lightweight. Asynchronous. Flexible.*

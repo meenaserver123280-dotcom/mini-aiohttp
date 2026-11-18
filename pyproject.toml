@@ -9,15 +9,13 @@ description = "A lightweight asyncio HTTP toolkit with HTTP/1.1, optional HTTP/2
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = []
 keywords = ["asyncio", "http", "client", "server", "websocket", "http2", "http3", "proxy"]
 classifiers = [
     "Framework :: AsyncIO",
     "Typing :: Typed",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
