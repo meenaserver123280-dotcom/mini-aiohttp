@@ -91,17 +91,17 @@ class _Step:
             return self._record_output(output)
         try:
             return self._zlib_feed(data)
-        except ClientError:
-            if self._raw_fallback and "Malformed compressed" in str(__import__("sys").exc_info()[1]):
-                self._raw_fallback = False
-                self._z = zlib.decompressobj(-zlib.MAX_WBITS)
-                try:
-                    return self._zlib_feed(data)
-                except (zlib.error, ClientError) as exc:
-                    if isinstance(exc, ClientError) and "max_response_size" in str(exc):
-                        raise
-                    raise ClientError("Malformed compressed response body") from exc
-            raise
+        except ClientError as exc:
+            if not self._raw_fallback or "Malformed compressed" not in str(exc):
+                raise
+            self._raw_fallback = False
+            self._z = zlib.decompressobj(-zlib.MAX_WBITS)
+            try:
+                return self._zlib_feed(data)
+            except ClientError as raw_exc:
+                if "max_response_size" in str(raw_exc):
+                    raise
+                raise ClientError("Malformed compressed response body") from raw_exc
 
     def flush(self) -> bytes:
         if self.name == "br":
