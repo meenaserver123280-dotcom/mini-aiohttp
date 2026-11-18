@@ -1,11 +1,24 @@
-## Unreleased
-
-- Add optional Rust/PyO3 request-head parsing and buffered response serialization with pure-Python fallbacks.
-- Use native parsing without creating intermediate Python line lists when the extension is available.
-- Add native extension build verification to CI and repeat/median server benchmarks.
-
---- FILE SHA: 4d49a731849f5486cc9a351bb7b2f2db8923c393 ---
 # Changelog
+
+## 0.5.5
+
+### Added
+- Optional Rust/PyO3 request-head parsing and buffered response serialization, with pure-Python fallbacks.
+- Native parsing without creating intermediate Python line lists when the extension is available.
+- Native extension build verification in CI, and repeated median server benchmarks.
+
+### Fixed
+- Connections refused with 503 now drain the client's unread request before closing, which avoids connection resets.
+- Removed stray files that were committed by mistake, and added a `.gitignore` for Python and Rust build output.
+- Rebuilt this changelog, which had stray tool-output lines committed.
+
+### Verification
+- Test suite passes on Python 3.11, 3.12 and 3.13 in CI (run 44349760462).
+- Not yet verified for this release: native and Python fallback parity tests, stress and malformed-request tests, Windows and macOS wheel builds, and benchmark results against aiohttp.
+
+### Known issues
+- The WebSocket connect-timeout test can leave a pending task behind, which shows up as a "Task was destroyed" warning. Cleanup is planned for the next release.
+
 
 ## 0.5.4
 
