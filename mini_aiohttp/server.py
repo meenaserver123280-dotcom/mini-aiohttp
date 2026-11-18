@@ -146,7 +146,10 @@ class Server:
         max_body_size: int = 10 * 1024 * 1024,
         backlog: int = 4096,
     ):
-        self.routes: list = []       # (method, pattern_segments, handler)
+        self.routes: list = []       # public route registrations: (method, pattern_segments, handler)
+        self._exact_routes: dict = {}  # (method, decoded path segments) -> handler
+        self._exact_paths: set = set()  # decoded paths registered for any method
+        self._param_routes: list = []  # parameterized routes only
         self.middleware: list = []   # async fn(request, call_next) -> Response
         self.max_connections = max_connections
         self.read_timeout = read_timeout
@@ -169,10 +172,19 @@ class Server:
         A GET route also answers HEAD requests when no HEAD route is registered.
         """
         def decorator(handler):
-            self.routes.append((method.upper(), _split_path(path), handler))
-            # Routes with fewer {params} are tried first, so '/users/me' beats '/users/{id}'
-            # no matter which one was registered first. sort() is stable, so ties keep order.
-            self.routes.sort(key=lambda r: _param_count(r[1]))
+            method_name = method.upper()
+            pattern = _split_path(path)
+            self.routes.append((method_name, pattern, handler))
+            if _param_count(pattern):
+                self._param_routes.append((method_name, pattern, handler))
+                # Keep parameter routes ordered by specificity; sorting only this small
+                # subset avoids scanning literal routes on every request.
+                self._param_routes.sort(key=lambda route: _param_count(route[1]))
+            else:
+                key = tuple(pattern)
+                # Preserve the original first-registration-wins behavior.
+                self._exact_routes.setdefault((method_name, key), handler)
+                self._exact_paths.add(key)
             return handler
         return decorator
 
@@ -220,16 +232,21 @@ class Server:
         return None
 
     def _match(self, method: str, path: str):
-        # Segments are percent-decoded here; %2F stays inside one segment.
-        segments = [unquote(seg) for seg in _split_path(path)]
-        path_seen = False
-        for route_method, pattern, handler in self.routes:
+        # Decode each segment once. Exact routes use O(1) dictionary lookup; only
+        # parameterized routes need pattern matching.
+        segments = tuple(unquote(seg) for seg in _split_path(path))
+        handler = self._exact_routes.get((method, segments))
+        if handler is not None:
+            return handler, {}, True
+
+        path_seen = segments in self._exact_paths
+        for route_method, pattern, route_handler in self._param_routes:
             params = _match_pattern(pattern, segments)
             if params is None:
                 continue
             path_seen = True
             if route_method == method:
-                return handler, params, True
+                return route_handler, params, True
         return None, None, path_seen
 
     async def _dispatch(self, req: Request) -> Response:
@@ -286,7 +303,10 @@ class Server:
         client_ip = peer[0] if peer else None
         while True:
             try:
-                request = await asyncio.wait_for(self._read_request(reader, writer), self.read_timeout)
+                # asyncio.timeout avoids creating a helper Task for every keep-alive
+                # request (wait_for() does), reducing per-request scheduling overhead.
+                async with asyncio.timeout(self.read_timeout):
+                    request = await self._read_request(reader, writer)
             except BadRequest as exc:
                 await self._send(writer, Response(exc.status, str(exc)), keep_alive=False)
                 return

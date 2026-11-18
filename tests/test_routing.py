@@ -64,3 +64,29 @@ async def test_middleware_runs_on_every_response(server):
         missing = await s.get(f"http://127.0.0.1:{server.port}/nope")
     assert ok.headers["x-powered-by"] == "mini-aiohttp"
     assert missing.status == 404
+
+
+async def test_exact_route_dispatch_is_direct_and_preserves_method_matching(server):
+    async with ClientSession() as s:
+        ok = await s.get(f"http://127.0.0.1:{server.port}/users/me")
+        wrong_method = await s.post(f"http://127.0.0.1:{server.port}/users/me", data=b"x")
+    assert ok.status == 200
+    assert ok.body == b"me"
+    assert wrong_method.status == 405
+
+
+async def test_exact_route_percent_decoding_is_preserved():
+    srv = Server()
+
+    @srv.route("/items/hello world")
+    async def item(req):
+        return Response(200, "matched")
+
+    await srv.start("127.0.0.1", 0)
+    try:
+        async with ClientSession() as s:
+            response = await s.get(f"http://127.0.0.1:{srv.port}/items/hello%20world")
+        assert response.status == 200
+        assert response.body == b"matched"
+    finally:
+        await srv.close()

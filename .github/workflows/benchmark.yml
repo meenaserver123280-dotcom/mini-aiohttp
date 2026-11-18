@@ -1,0 +1,44 @@
+name: Performance benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: Seconds per benchmark run
+        required: true
+        default: "20"
+      concurrency:
+        description: Concurrent keep-alive workers
+        required: true
+        default: "64"
+
+permissions:
+  contents: read
+
+jobs:
+  server-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install aiohttp
+      - name: Benchmark mini-aiohttp and aiohttp
+        env:
+          DURATION: ${{ inputs.duration }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+        run: |
+          python benchmarks/bench.py run --duration "$DURATION" --warmup 5 --concurrency "$CONCURRENCY" | tee benchmark-results.txt
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-benchmark-results
+          path: benchmark-results.txt
+          if-no-files-found: error
