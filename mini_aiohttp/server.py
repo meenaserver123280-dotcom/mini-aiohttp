@@ -353,50 +353,51 @@ class Server:
             headers[key] = value.strip()
 
     async def _read_request(self, reader, writer=None) -> Request | None:
-        # Read the complete request head in one StreamReader operation. Parsing each
-        # header with a separate readuntil() adds avoidable coroutine/await overhead.
-        while True:
-            try:
-                head = await reader.readuntil(b"\r\n\r\n")
-            except asyncio.IncompleteReadError as exc:
-                if not exc.partial:
-                    return None
-                raise
-            except asyncio.LimitOverrunError:
-                raise BadRequest(431, "Request headers too large")
-
-            lines = head[:-4].split(b"\r\n")
-            while lines and not lines[0]:
-                lines.pop(0)  # RFC 9112: ignore empty lines before the request line.
-            if lines:
-                break
-
-        if any(len(raw) + 2 > MAX_LINE for raw in lines):
-            raise BadRequest(431, "Line too long")
-        header_lines = lines[1:]
-        if len(header_lines) > MAX_HEADER_COUNT:
-            raise BadRequest(431, "Too many headers")
+        try:
+            head = await reader.readuntil(b"\\r\\n\\r\\n")
+        except asyncio.IncompleteReadError as exc:
+            if not exc.partial:
+                return None
+            raise
+        except asyncio.LimitOverrunError:
+            raise BadRequest(431, "Request headers too large")
 
         headers: dict = {}
         if _native_parse_request_head is not None:
+            # Native parser handles line splitting, token checks and header decoding
+            # without first allocating an intermediate Python list of byte strings.
             try:
                 method, target, version, parsed_headers = _native_parse_request_head(head)
             except ValueError as exc:
-                raise BadRequest(400, str(exc))
+                message = str(exc)
+                status = 431 if message in ("Line too long", "Too many headers") else 400
+                raise BadRequest(status, message)
             if not _METHOD_RE.fullmatch(method):
                 raise BadRequest(400, "Invalid request method")
+            if len(parsed_headers) > MAX_HEADER_COUNT:
+                raise BadRequest(431, "Too many headers")
             for name, value in parsed_headers:
                 key = name.lower()
                 if key in headers and key in _SINGLETON_HEADERS:
                     raise BadRequest(400, f"Duplicate {name} header")
                 headers[key] = value
         else:
+            lines = head[:-4].split(b"\\r\\n")
+            while lines and not lines[0]:
+                lines.pop(0)
+            if not lines:
+                raise BadRequest(400, "Malformed request line")
+            if any(len(raw) + 2 > MAX_LINE for raw in lines):
+                raise BadRequest(431, "Line too long")
             try:
                 method, target, version = lines[0].decode("latin-1").split(" ")
             except ValueError:
                 raise BadRequest(400, "Malformed request line")
             if not _METHOD_RE.fullmatch(method):
                 raise BadRequest(400, "Invalid request method")
+            header_lines = lines[1:]
+            if len(header_lines) > MAX_HEADER_COUNT:
+                raise BadRequest(431, "Too many headers")
             for raw in header_lines:
                 if raw[:1] in (b" ", b"\\t"):
                     raise BadRequest(400, "Obsolete line folding is not allowed")
@@ -420,13 +421,12 @@ class Server:
         if has_transfer_encoding and has_content_length:
             raise BadRequest(400, "Content-Length and Transfer-Encoding cannot be combined")
 
-        # Expect: 100-continue: tell the client to send the body now, instead of waiting.
         if (
             writer is not None
             and version == "HTTP/1.1"
             and headers.get("expect", "").lower() == "100-continue"
         ):
-            writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")
+            writer.write(b"HTTP/1.1 100 Continue\\r\\n\\r\\n")
             await writer.drain()
 
         if has_transfer_encoding:
