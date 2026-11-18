@@ -14,38 +14,56 @@ concurrency:
 
 jobs:
   build:
-    name: Build distributions
+    name: Build and validate distributions
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - name: Install build tools
-        run: python -m pip install --upgrade build twine
+        run: python -m pip install --upgrade pip build twine setuptools-rust
+      - name: Verify release tag matches package version
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PACKAGE_VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "$RELEASE_TAG" != "v$PACKAGE_VERSION" ]; then
+            echo "Release tag $RELEASE_TAG does not match package version v$PACKAGE_VERSION"
+            exit 1
+          fi
       - name: Build wheel and source distribution
-        run: python -m build
-      - name: Check distributions
+        run: python -m build --sdist --wheel
+      - name: Validate distributions
         run: python -m twine check dist/*
+      - name: List built distributions
+        run: ls -lh dist/
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: python-distributions
           path: dist/
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish to PyPI
+    if: github.event_name == 'release'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      id-token: write  # required for PyPI trusted publishing (OIDC)
+      id-token: write
       contents: read
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: python-distributions
           path: dist/
-      - name: Publish to PyPI
+      - name: Publish to PyPI using trusted publishing
         uses: pypa/gh-action-pypi-publish@release/v1
