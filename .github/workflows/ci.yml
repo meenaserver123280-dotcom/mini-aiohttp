@@ -1,3 +1,4 @@
+--- FILE SHA: 3456939751a9f7b5cce8c81aef03f7a1cb5065ab ---
 name: CI
 
 on:
@@ -21,6 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path rust/Cargo.toml -- --check
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
