@@ -143,6 +143,21 @@ async def _close_iterator(iterator) -> None:
         await aclose()
 
 
+async def _lingering_close(reader, writer) -> None:
+    """Half-close, then drain the peer's unread request before closing.
+
+    Closing a socket that still has unread data makes the kernel send RST, which can
+    reach the client before our response and surface as ConnectionResetError.
+    """
+    try:
+        writer.write_eof()
+        async with asyncio.timeout(1.0):
+            while await reader.read(64 * 1024):
+                pass
+    except Exception:
+        pass
+
+
 class Server:
     def __init__(
         self,
@@ -302,6 +317,7 @@ class Server:
             if self._draining or self._active >= self.max_connections:
                 # Refuse fast instead of queueing: keeps memory bounded under overload.
                 await self._send(writer, Response(503, "Server busy"), keep_alive=False)
+                await _lingering_close(reader, writer)
                 return
             self._active += 1
             self._total_connections += 1
