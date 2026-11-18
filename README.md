@@ -1,3 +1,4 @@
+--- FILE SHA: 106f6f3f6b82b4346125cf2ab948c656270cca5d ---
 --- FILE SHA: 77d639eeea9ae7be12727f0d37ec116a724326ce ---
 --- FILE SHA: 11b2b1a98676e39a128ea2fef3019d7fce655050 ---
 # ⚡ mini-aiohttp
@@ -71,7 +72,10 @@ Designed for simplicity, performance, flexibility and security. The core keeps a
 
 ---
 
-## 📦 Installation\n\nFor the native parser, install Rust (rustup) before installing the package so the optional extension can be compiled. Without Rust, the package automatically uses the pure-Python parser.\n
+## 📦 Installation
+
+For the native parser, install Rust (rustup) before installing the package so the optional extension can be compiled. Without Rust, the package automatically uses the pure-Python parser.
+
 
 Core (no dependencies):
 
