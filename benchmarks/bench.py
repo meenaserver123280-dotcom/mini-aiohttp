@@ -1,5 +1,3 @@
---- FILE SHA: 628b5874a31b085a50be1783d445b415cb464c94 ---
---- FILE SHA: 48402689b828e6190b3ce8c6e1cc1a64811fbfef ---
 """Benchmark mini-aiohttp against aiohttp with the same load generator.
 
 The load generator uses raw asyncio sockets and keep-alive HTTP/1.1, so it does not

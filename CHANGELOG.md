@@ -1,5 +1,3 @@
---- FILE SHA: dbaa0ff6f8fb918ec5c57e0cb9bbb73ef1ffce1e ---
---- FILE SHA: 7045e8f6e8fc43fa268045861b4e3bb5a08a3ba2 ---
 ## Unreleased
 
 - Add an optional Rust/PyO3 HTTP request-head parser with a pure-Python fallback.
