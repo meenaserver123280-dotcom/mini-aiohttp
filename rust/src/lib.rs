@@ -109,7 +109,7 @@ fn serialize_response(
     keep_alive: bool,
 ) -> PyResult<Py<PyBytes>> {
     let mut output = Vec::with_capacity(body.as_bytes().len() + 256);
-    output.extend_from_slice(format!("HTTP/1.1 {} {}\\r\\n", status, reason).as_bytes());
+    output.extend_from_slice(format!("HTTP/1.1 {} {}\r\n", status, reason).as_bytes());
     for (key, value) in headers.iter() {
         let name: String = key.extract()?;
         let value_bound = value.str()?;
@@ -128,21 +128,20 @@ fn serialize_response(
         output.extend_from_slice(&title);
         output.extend_from_slice(b": ");
         append_latin1(&mut output, &value)?;
-        output.extend_from_slice(b"\\r\\n");
+        output.extend_from_slice(b"\r\n");
     }
     for cookie in cookies.iter() {
         let value_bound = cookie.str()?;
         let value = value_bound.to_str()?.to_owned();
         output.extend_from_slice(b"Set-Cookie: ");
         append_latin1(&mut output, &value)?;
-        output.extend_from_slice(b"\\r\\n");
+        output.extend_from_slice(b"\r\n");
     }
-    output.extend_from_slice(b"\\r\\n");
+    output.extend_from_slice(b"\r\n");
     output.extend_from_slice(body.as_bytes());
     let _ = keep_alive;
     Ok(PyBytes::new(py, &output).unbind())
 }
-
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_request_head, module)?)?;

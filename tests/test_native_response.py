@@ -11,20 +11,20 @@ except ImportError:
 @pytest.mark.skipif(serialize_response is None, reason="optional Rust extension is not built")
 @pytest.mark.parametrize("keep_alive", [True, False])
 def test_native_response_serializer_matches_python(keep_alive):
-    response = Response(201, 'hello', {'content-type': 'text/plain', 'x-powered-by': 'mini-aiohttp'})
-    response.add_set_cookie('session=abc; HttpOnly')
+    response = Response(201, "hello", {"content-type": "text/plain", "x-powered-by": "mini-aiohttp"})
+    response.add_set_cookie("session=abc; HttpOnly")
     headers = dict(response.headers)
-    headers.setdefault('content-type', 'text/plain; charset=utf-8')
-    headers['content-length'] = str(len(response.body))
-    headers['connection'] = 'keep-alive' if keep_alive else 'close'
+    headers.setdefault("content-type", "text/plain; charset=utf-8")
+    headers["content-length"] = str(len(response.body))
+    headers["connection"] = "keep-alive" if keep_alive else "close"
     expected = (
-        '\r\n'.join(
-            [f'HTTP/1.1 {response.status} {response.reason}']
-            + [f'{key.title()}: {value}' for key, value in headers.items()]
-            + [f'Set-Cookie: {cookie}' for cookie in response._out_set_cookies]
+        "\r\n".join(
+            [f"HTTP/1.1 {response.status} {response.reason}"]
+            + [f"{key.title()}: {value}" for key, value in headers.items()]
+            + [f"Set-Cookie: {cookie}" for cookie in response._out_set_cookies]
         )
-        + '\r\n\r\n'
-    ).encode('latin-1') + response.body
+        + "\r\n\r\n"
+    ).encode("latin-1") + response.body
     actual = serialize_response(
         response.status, response.reason, headers, response._out_set_cookies, response.body, keep_alive
     )
@@ -39,3 +39,11 @@ def test_native_response_serializer_stringifies_mutated_header_values():
     data = response.to_bytes()
     assert b"X-Count: 7\r\n" in data
     assert b"Set-Cookie: 123\r\n" in data
+
+
+@pytest.mark.skipif(serialize_response is None, reason="optional Rust extension is not built")
+def test_native_response_serializer_preserves_latin1_encoding_errors():
+    response = Response(200, b"ok")
+    response.headers["x-name"] = "snowman: \u2603"
+    with pytest.raises(UnicodeEncodeError):
+        response.to_bytes()
