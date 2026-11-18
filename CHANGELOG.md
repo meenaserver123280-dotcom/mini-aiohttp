@@ -1,3 +1,4 @@
+--- FILE SHA: 7045e8f6e8fc43fa268045861b4e3bb5a08a3ba2 ---
 ## Unreleased\n\n- Add an optional Rust/PyO3 HTTP request-head parser with a pure-Python fallback.\n- Use native parsing without creating intermediate Python line lists when the extension is available.\n- Add native parser build verification to CI and repeat/median benchmark runs.\n\n--- FILE SHA: 4d49a731849f5486cc9a351bb7b2f2db8923c393 ---
 # Changelog
 

@@ -1,3 +1,4 @@
+--- FILE SHA: 77d639eeea9ae7be12727f0d37ec116a724326ce ---
 --- FILE SHA: 11b2b1a98676e39a128ea2fef3019d7fce655050 ---
 # ⚡ mini-aiohttp
 

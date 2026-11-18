@@ -1,3 +1,4 @@
+--- FILE SHA: e864836f13ccfb1b736ec562535fc591b1b62a85 ---
 --- FILE SHA: bd3985bdc3c9353cd09ee8369d0612abe454f794 ---
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -36,7 +37,7 @@ fn parse_inner(data: &[u8]) -> Result<(String, String, String, Vec<(String, Stri
     if method.is_empty() || method.len() > 20 || !method.iter().all(|byte| is_token(*byte)) {
         return Err("Invalid request method");
     }
-    if target.is_empty() || parts.next().is_some() {
+    if target.is_empty() || version.is_empty() || parts.next().is_some() {
         return Err("Malformed request line");
     }
 
