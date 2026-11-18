@@ -10,6 +10,11 @@ from urllib.parse import unquote, urlsplit
 
 from .response import Request, Response, check_header
 
+try:
+    from ._native import parse_request_head as _native_parse_request_head
+except ImportError:  # Optional Rust acceleration; pure-Python fallback remains available.
+    _native_parse_request_head = None
+
 log = logging.getLogger("mini_aiohttp.server")
 
 MAX_LINE = 8 * 1024  # max size of one request or header line
@@ -368,34 +373,47 @@ class Server:
 
         if any(len(raw) + 2 > MAX_LINE for raw in lines):
             raise BadRequest(431, "Line too long")
-        try:
-            method, target, version = lines[0].decode("latin-1").split(" ")
-        except ValueError:
-            raise BadRequest(400, "Malformed request line")
-        if not _METHOD_RE.fullmatch(method):
-            raise BadRequest(400, "Invalid request method")
-        if version not in _SUPPORTED_VERSIONS:
-            raise BadRequest(505, "HTTP version not supported")
-        path, query = _parse_target(target)
-
-        headers: dict = {}
         header_lines = lines[1:]
         if len(header_lines) > MAX_HEADER_COUNT:
             raise BadRequest(431, "Too many headers")
-        for raw in header_lines:
-            if raw[:1] in (b" ", b"\t"):
-                raise BadRequest(400, "Obsolete line folding is not allowed")
-            text = raw.decode("latin-1")
-            name, sep, value = text.partition(":")
-            # No whitespace allowed in the name: "Host : x" is a classic smuggling trick.
-            if not sep or not _TOKEN_RE.fullmatch(name):
-                raise BadRequest(400, "Malformed header")
-            if "\x00" in value:
-                raise BadRequest(400, "Invalid header value")
-            key = name.lower()
-            if key in headers and key in _SINGLETON_HEADERS:
-                raise BadRequest(400, f"Duplicate {name} header")
-            headers[key] = value.strip()
+
+        headers: dict = {}
+        if _native_parse_request_head is not None:
+            try:
+                method, target, version, parsed_headers = _native_parse_request_head(head)
+            except ValueError as exc:
+                raise BadRequest(400, str(exc))
+            if not _METHOD_RE.fullmatch(method):
+                raise BadRequest(400, "Invalid request method")
+            for name, value in parsed_headers:
+                key = name.lower()
+                if key in headers and key in _SINGLETON_HEADERS:
+                    raise BadRequest(400, f"Duplicate {name} header")
+                headers[key] = value
+        else:
+            try:
+                method, target, version = lines[0].decode("latin-1").split(" ")
+            except ValueError:
+                raise BadRequest(400, "Malformed request line")
+            if not _METHOD_RE.fullmatch(method):
+                raise BadRequest(400, "Invalid request method")
+            for raw in header_lines:
+                if raw[:1] in (b" ", b"\\t"):
+                    raise BadRequest(400, "Obsolete line folding is not allowed")
+                text = raw.decode("latin-1")
+                name, sep, value = text.partition(":")
+                if not sep or not _TOKEN_RE.fullmatch(name):
+                    raise BadRequest(400, "Malformed header")
+                if "\\x00" in value:
+                    raise BadRequest(400, "Invalid header value")
+                key = name.lower()
+                if key in headers and key in _SINGLETON_HEADERS:
+                    raise BadRequest(400, f"Duplicate {name} header")
+                headers[key] = value.strip()
+
+        if version not in _SUPPORTED_VERSIONS:
+            raise BadRequest(505, "HTTP version not supported")
+        path, query = _parse_target(target)
 
         has_transfer_encoding = "transfer-encoding" in headers
         has_content_length = "content-length" in headers
