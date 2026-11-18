@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-aiohttp"
+version = "0.5.3"
+description = "A lightweight asyncio HTTP toolkit with HTTP/1.1, optional HTTP/2 and HTTP/3, WebSockets, and proxy support"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["asyncio", "http", "client", "server", "websocket", "http2", "http3", "proxy"]
+classifiers = [
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/hostunio16-ops/mini-aiohttp"
+Repository = "https://github.com/hostunio16-ops/mini-aiohttp"
+Changelog = "https://github.com/hostunio16-ops/mini-aiohttp/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Protocol support
+http2 = ["h2>=4.1.0"]
+http3 = ["aioquic>=1.2.0"]
+# Content-Encoding br (gzip and deflate need nothing extra)
+brotli = ["brotli>=1.0.9"]
+# Faster JSON in Response.json / Request.json
+orjson = ["orjson>=3.9"]
+# Mozilla CA bundle for HTTPS
+certifi = ["certifi>=2023.7.22"]
+# Event loop and JSON speed-ups, opt-in: call mini_aiohttp.use_uvloop() before asyncio.run()
+speed = ["orjson>=3.9", "uvloop>=0.17; sys_platform != 'win32'"]
+# Integrations (mini_aiohttp.extras)
+prometheus = ["prometheus-client>=0.17"]
+jwt = ["pyjwt>=2.8"]
+pydantic = ["pydantic>=2.0"]
+otel = ["opentelemetry-api>=1.20"]
+# Development and tests
+test = [
+    "pytest>=7",
+    "pytest-asyncio>=0.21,<1.0",
+    "pytest-timeout>=2.2",
+    "pytest-cov>=4",
+    "hypothesis>=6",
+]
+dev = [
+    "mini-aiohttp[test]",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+]
+all = [
+    "h2>=4.1.0",
+    "aioquic>=1.2.0",
+    "brotli>=1.0.9",
+    "orjson>=3.9",
+    "certifi>=2023.7.22",
+    "uvloop>=0.17; sys_platform != 'win32'",
+    "prometheus-client>=0.17",
+    "pyjwt>=2.8",
+    "pydantic>=2.0",
+    "opentelemetry-api>=1.20",
+]
+
+[tool.setuptools.packages.find]
+include = ["mini_aiohttp*"]
+
+[tool.setuptools.package-data]
+mini_aiohttp = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+# Fail a hung test after 30s instead of blocking the whole CI job.
+timeout = 30
+
+[tool.coverage.run]
+source = ["mini_aiohttp"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I"]
+ignore = ["E501", "UP007", "UP035", "UP006"]
+
+[tool.mypy]
+python_version = "3.9"
+files = ["mini_aiohttp"]
+ignore_missing_imports = true
+check_untyped_defs = false
