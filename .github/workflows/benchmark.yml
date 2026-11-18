@@ -12,6 +12,10 @@ on:
         required: true
         default: "64"
 
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
