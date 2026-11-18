@@ -1,4 +1,3 @@
---- FILE SHA: 2f2a9ee884e2e8fed0dca2d0991f5fc830c0df19 ---
 # Changelog
 
 ## 0.5.4

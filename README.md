@@ -1,4 +1,3 @@
---- FILE SHA: b0ba2982107174ec6e0b08c732e31ff4d47a2888 ---
 # ⚡ mini-aiohttp
 
 **mini-aiohttp v0.5.4** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio.

@@ -1,4 +1,3 @@
---- FILE SHA: 2effc337c62eea2f75eda6258d7e88618a223aca ---
 """mini-aiohttp: a small asyncio HTTP client and server toolkit."""
 from ._optional import use_uvloop
 from .auto import AutoClientSession
