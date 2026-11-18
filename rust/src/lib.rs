@@ -98,14 +98,14 @@ fn serialize_response(
         let value_bound = value.str()?;
         let value = value_bound.to_str()?.to_owned();
         let mut title = Vec::with_capacity(name.len());
-        let mut upper = true;
+        let mut capitalize = true;
         for byte in name.bytes() {
-            if byte == b'-' {
-                title.push(byte);
-                upper = true;
+            if byte.is_ascii_alphabetic() {
+                title.push(if capitalize { byte.to_ascii_uppercase() } else { byte.to_ascii_lowercase() });
+                capitalize = false;
             } else {
-                title.push(if upper { byte.to_ascii_uppercase() } else { byte });
-                upper = false;
+                title.push(byte);
+                capitalize = true;
             }
         }
         output.extend_from_slice(&title);
