@@ -369,7 +369,7 @@ python -m twine check dist/*
 - WebSocket servers do not check the `Origin` header; if you authenticate with cookies, validate `Origin` in your handler.
 - WebSocket `permessage-deflate` (compression) is not implemented yet.
 - The server does not answer `HEAD` requests yet, and static files do not support `Range` requests or `ETag` yet.
-- Compressed streamed responses are decoded as they arrive; `max_response_size` limits the encoded size, not the decoded size.
+- `max_response_size` limits encoded and decoded response sizes. Gzip/deflate use zlib's bounded-output API; Brotli's Python decoder has no output-length parameter, so its output is checked after each decoder call rather than hard-capped during allocation.
 - HTTPS proxy tunnels require a CONNECT-capable HTTP proxy or SOCKS5 proxy.
 - Streaming responses require asynchronous iterables.
 - No automatic multi-process worker manager is included.

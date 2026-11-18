@@ -4,6 +4,7 @@
 
 ### Fixed
 - Streamed responses now enforce the cumulative decoded size limit (`max_response_size`), including decompressed bodies.
+- Gzip/deflate decompression now uses zlib's `max_length` to stop output at the configured limit plus one detection byte.
 - README version references are synchronized with package metadata.
 
 ### Changed

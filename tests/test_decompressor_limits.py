@@ -48,3 +48,23 @@ def test_zlib_decoder_none_disables_output_limit():
     output = decoder.feed(gzip.compress(body)) + decoder.finish()
 
     assert output == body
+
+
+def test_zlib_decoder_handles_fragmented_input():
+    body = b"fragmented input" * 100
+    compressed = gzip.compress(body)
+    decoder = ContentDecoder("gzip", max_output_size=len(body))
+    output = b"".join(
+        decoder.feed(compressed[index:index + 3])
+        for index in range(0, len(compressed), 3)
+    )
+    output += decoder.finish()
+    assert output == body
+
+
+def test_raw_deflate_fallback_respects_output_limit():
+    compressor = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+    compressed = compressor.compress(b"x" * 100_000) + compressor.flush()
+    decoder = ContentDecoder("deflate", max_output_size=100)
+    with pytest.raises(ClientError, match="max_response_size"):
+        decoder.feed(compressed)
