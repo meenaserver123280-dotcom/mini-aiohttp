@@ -238,14 +238,24 @@ class Server:
         return None
 
     def _match(self, method: str, path: str):
-        # Decode each segment once. Exact routes use O(1) dictionary lookup; only
-        # parameterized routes need pattern matching.
-        segments = tuple(unquote(seg) for seg in _split_path(path))
-        handler = self._exact_routes.get((method, segments))
+        # Most URLs contain no percent escapes. Avoid allocating decoded segments
+        # unless decoding can actually change the path.
+        raw_segments = tuple(_split_path(path))
+        segments = (
+            tuple(unquote(segment) for segment in raw_segments)
+            if "%" in path else raw_segments
+        )
+        handler = self._exact_routes.get((method, raw_segments))
         if handler is not None:
             return handler, {}, True
+        if segments is not raw_segments:
+            handler = self._exact_routes.get((method, segments))
+            if handler is not None:
+                return handler, {}, True
 
-        path_seen = segments in self._exact_paths
+        path_seen = raw_segments in self._exact_paths
+        if not path_seen and segments is not raw_segments:
+            path_seen = segments in self._exact_paths
         for route_method, pattern, route_handler in self._param_routes:
             params = _match_pattern(pattern, segments)
             if params is None:
@@ -262,6 +272,9 @@ class Server:
                 handler, params, path_seen = self._match("GET", req.path)
             if handler is not None:
                 req.params = params
+                if not self.middleware:
+                    result = await handler(req)
+                    return result if isinstance(result, Response) else Response(200, result)
                 terminal = _route_terminal(handler)
             else:
                 fixed = self._static_response(req)
@@ -270,6 +283,8 @@ class Server:
                         Response(405, "Method Not Allowed") if path_seen
                         else Response(404, "Not Found")
                     )
+                if not self.middleware:
+                    return fixed
                 terminal = _const(fixed)
             chain = terminal
             for mw in reversed(self.middleware):
