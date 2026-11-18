@@ -21,6 +21,9 @@ fn parse_inner(data: &[u8]) -> Result<(String, String, String, Vec<(String, Stri
     if first.is_empty() {
         return Err("Malformed request line");
     }
+    if first.len() + 2 > 8 * 1024 {
+        return Err("Line too long");
+    }
 
     let mut parts = first.split(|byte| *byte == b' ');
     let method = parts.next().unwrap_or_default();
@@ -34,9 +37,17 @@ fn parse_inner(data: &[u8]) -> Result<(String, String, String, Vec<(String, Stri
     }
 
     let mut headers = Vec::new();
+    let mut header_count = 0usize;
     for raw in lines {
         if raw.is_empty() {
             continue;
+        }
+        header_count += 1;
+        if header_count > 100 {
+            return Err("Too many headers");
+        }
+        if raw.len() + 2 > 8 * 1024 {
+            return Err("Line too long");
         }
         if matches!(raw.first(), Some(b' ' | b'\t')) {
             return Err("Obsolete line folding is not allowed");
