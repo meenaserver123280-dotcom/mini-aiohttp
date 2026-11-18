@@ -1,0 +1,1 @@
+# PEP 561 marker: tells type checkers that mini_aiohttp ships inline type hints.
