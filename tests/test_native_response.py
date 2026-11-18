@@ -47,3 +47,13 @@ def test_native_response_serializer_preserves_latin1_encoding_errors():
     response.headers["x-name"] = "snowman: \u2603"
     with pytest.raises(UnicodeEncodeError):
         response.to_bytes()
+
+@pytest.mark.skipif(serialize_response is None, reason="optional Rust extension is not built")
+def test_native_serializer_matches_python_fallback(monkeypatch):
+    import mini_aiohttp.response as response_module
+
+    response = Response(202, "payload", {"x_custom-header.foo": "value"})
+    native = response.to_bytes()
+    monkeypatch.setattr(response_module, "_native_serialize_response", None)
+    assert response.to_bytes() == native
+    assert b"X_Custom-Header.Foo: value\r\n" in native
