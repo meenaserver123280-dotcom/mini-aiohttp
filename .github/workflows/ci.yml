@@ -3,8 +3,26 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - "mini_aiohttp/**"
+      - "rust/**"
+      - "tests/**"
+      - "setup.py"
+      - "pyproject.toml"
+      - "setup.cfg"
+      - "tox.ini"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "mini_aiohttp/**"
+      - "rust/**"
+      - "tests/**"
+      - "setup.py"
+      - "pyproject.toml"
+      - "setup.cfg"
+      - "tox.ini"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 concurrency:
@@ -18,8 +36,9 @@ jobs:
   tests:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
@@ -39,6 +58,7 @@ jobs:
   build:
     name: Build distributions
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
