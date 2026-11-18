@@ -74,7 +74,9 @@ class _Step:
             # extra byte proves the stream exceeds the configured limit.
             output = self._z.decompress(data, remaining + 1)
         except zlib.error as exc:
-            raise ClientError("Malformed compressed response body") from exc
+            # A zlib-wrapper header failure may indicate raw RFC 1951 deflate.
+            # Keep it distinct from size-limit errors so feed() can retry safely.
+            raise _MalformedCompressed from exc
 
         if len(output) > remaining or self._z.unconsumed_tail:
             raise ClientError(
