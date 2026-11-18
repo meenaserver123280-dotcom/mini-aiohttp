@@ -1,10 +1,11 @@
+--- FILE SHA: c6199cf63aa260c628b74fad7c3978b387ebe9dc ---
 [build-system]
 requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mini-aiohttp"
-version = "0.5.3"
+version = "0.5.4"
 description = "A lightweight asyncio HTTP toolkit with HTTP/1.1, optional HTTP/2 and HTTP/3, WebSockets, and proxy support"
 readme = "README.md"
 license = "MIT"

@@ -1,3 +1,4 @@
+--- FILE SHA: 2effc337c62eea2f75eda6258d7e88618a223aca ---
 """mini-aiohttp: a small asyncio HTTP client and server toolkit."""
 from ._optional import use_uvloop
 from .auto import AutoClientSession
@@ -13,7 +14,7 @@ from .security import RateLimiter, cors, ip_policy, require_json, security_heade
 from .server import Server
 from .websocket import WebSocket, WebSocketError, WebSocketServer
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 __all__ = [
     "ClientSession", "ClientError", "CookieJar", "Server", "Request", "Response",
     "UploadedFile", "RateLimiter", "cors", "ip_policy", "require_json",

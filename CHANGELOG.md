@@ -1,4 +1,15 @@
+--- FILE SHA: 2f2a9ee884e2e8fed0dca2d0991f5fc830c0df19 ---
 # Changelog
+
+## 0.5.4
+
+### Fixed
+- Enforce decompressor-level output limits for gzip and deflate responses to reduce decompression-bomb memory exposure.
+- Add regression coverage for bounded and fragmented decompression, exact limits, and raw-deflate fallback.
+
+### Notes
+- Brotli output is validated after each decoder call; the Python Brotli API does not expose a hard output-length limit.
+
 
 ## 0.5.3
 
