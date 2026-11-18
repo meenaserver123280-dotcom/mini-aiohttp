@@ -90,3 +90,21 @@ async def test_exact_route_percent_decoding_is_preserved():
         assert response.body == b"matched"
     finally:
         await srv.close()
+
+async def test_dispatch_without_middleware_uses_direct_handler_path():
+    srv = Server()
+
+    @srv.route("/plain")
+    async def plain(req):
+        return "plain"
+
+    await srv.start("127.0.0.1", 0)
+    try:
+        async with ClientSession() as client:
+            ok = await client.get(f"http://127.0.0.1:{srv.port}/plain")
+            wrong_method = await client.post(f"http://127.0.0.1:{srv.port}/plain", data=b"x")
+        assert ok.status == 200
+        assert ok.body == b"plain"
+        assert wrong_method.status == 405
+    finally:
+        await srv.close()
