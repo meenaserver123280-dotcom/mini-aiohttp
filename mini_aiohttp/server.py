@@ -352,7 +352,7 @@ class Server:
         # header with a separate readuntil() adds avoidable coroutine/await overhead.
         while True:
             try:
-                head = await reader.readuntil(b"\\r\\n\\r\\n")
+                head = await reader.readuntil(b"\r\n\r\n")
             except asyncio.IncompleteReadError as exc:
                 if not exc.partial:
                     return None
@@ -360,7 +360,7 @@ class Server:
             except asyncio.LimitOverrunError:
                 raise BadRequest(431, "Request headers too large")
 
-            lines = head[:-4].split(b"\\r\\n")
+            lines = head[:-4].split(b"\r\n")
             while lines and not lines[0]:
                 lines.pop(0)  # RFC 9112: ignore empty lines before the request line.
             if lines:
@@ -383,14 +383,14 @@ class Server:
         if len(header_lines) > MAX_HEADER_COUNT:
             raise BadRequest(431, "Too many headers")
         for raw in header_lines:
-            if raw[:1] in (b" ", b"\\t"):
+            if raw[:1] in (b" ", b"\t"):
                 raise BadRequest(400, "Obsolete line folding is not allowed")
             text = raw.decode("latin-1")
             name, sep, value = text.partition(":")
             # No whitespace allowed in the name: "Host : x" is a classic smuggling trick.
             if not sep or not _TOKEN_RE.fullmatch(name):
                 raise BadRequest(400, "Malformed header")
-            if "\\x00" in value:
+            if "\x00" in value:
                 raise BadRequest(400, "Invalid header value")
             key = name.lower()
             if key in headers and key in _SINGLETON_HEADERS:
@@ -408,7 +408,7 @@ class Server:
             and version == "HTTP/1.1"
             and headers.get("expect", "").lower() == "100-continue"
         ):
-            writer.write(b"HTTP/1.1 100 Continue\\r\\n\\r\\n")
+            writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")
             await writer.drain()
 
         if has_transfer_encoding:
