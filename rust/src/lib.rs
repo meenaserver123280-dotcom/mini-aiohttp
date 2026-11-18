@@ -1,9 +1,26 @@
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyUnicodeEncodeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
 fn latin1(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| char::from(*byte)).collect()
+}
+
+fn append_latin1(output: &mut Vec<u8>, value: &str) -> PyResult<()> {
+    for (index, character) in value.chars().enumerate() {
+        let codepoint = character as u32;
+        if codepoint > 255 {
+            return Err(PyUnicodeEncodeError::new_err((
+                "latin-1",
+                value.to_owned(),
+                index,
+                index + 1,
+                "ordinal not in range(256)",
+            )));
+        }
+        output.push(codepoint as u8);
+    }
+    Ok(())
 }
 
 fn is_token(byte: u8) -> bool {
@@ -110,14 +127,14 @@ fn serialize_response(
         }
         output.extend_from_slice(&title);
         output.extend_from_slice(b": ");
-        output.extend_from_slice(value.as_bytes());
+        append_latin1(&mut output, &value)?;
         output.extend_from_slice(b"\\r\\n");
     }
     for cookie in cookies.iter() {
         let value_bound = cookie.str()?;
         let value = value_bound.to_str()?.to_owned();
         output.extend_from_slice(b"Set-Cookie: ");
-        output.extend_from_slice(value.as_bytes());
+        append_latin1(&mut output, &value)?;
         output.extend_from_slice(b"\\r\\n");
     }
     output.extend_from_slice(b"\\r\\n");
