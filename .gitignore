@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Compiled native extension (built by setup.py / setuptools-rust)
+mini_aiohttp/_native*.so
+mini_aiohttp/_native*.pyd
+
+# Rust build output
+rust/target/
+rust/Cargo.lock
