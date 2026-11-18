@@ -1,3 +1,4 @@
+--- FILE SHA: 628b5874a31b085a50be1783d445b415cb464c94 ---
 --- FILE SHA: 48402689b828e6190b3ce8c6e1cc1a64811fbfef ---
 """Benchmark mini-aiohttp against aiohttp with the same load generator.
 
@@ -237,7 +238,7 @@ def main() -> None:
             "p99_ms": statistics.median(item["p99_ms"] for item in samples),
             "server_stderr": next((item["server_stderr"] for item in samples if item["server_stderr"]), ""),
         })
-    print("\\nMedian across", args.repeat, "trials:")
+    print("\nMedian across", args.repeat, "trials:")
     _print_table(results, args.duration, args.concurrency)
 
 
