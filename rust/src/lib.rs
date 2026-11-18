@@ -84,7 +84,7 @@ fn parse_request_head(data: &Bound<'_, PyBytes>) -> PyResult<(String, String, St
 #[pyfunction]
 fn serialize_response(
     py: Python<'_>,
-    status: u16,
+    status: i64,
     reason: &str,
     headers: &Bound<'_, PyDict>,
     cookies: &Bound<'_, PyList>,
@@ -95,7 +95,8 @@ fn serialize_response(
     output.extend_from_slice(format!("HTTP/1.1 {} {}\\r\\n", status, reason).as_bytes());
     for (key, value) in headers.iter() {
         let name: String = key.extract()?;
-        let value: String = value.extract()?;
+        let value_bound = value.str()?;
+        let value = value_bound.to_str()?.to_owned();
         let mut title = Vec::with_capacity(name.len());
         let mut upper = true;
         for byte in name.bytes() {
@@ -113,7 +114,8 @@ fn serialize_response(
         output.extend_from_slice(b"\\r\\n");
     }
     for cookie in cookies.iter() {
-        let value: String = cookie.extract()?;
+        let value_bound = cookie.str()?;
+        let value = value_bound.to_str()?.to_owned();
         output.extend_from_slice(b"Set-Cookie: ");
         output.extend_from_slice(value.as_bytes());
         output.extend_from_slice(b"\\r\\n");
