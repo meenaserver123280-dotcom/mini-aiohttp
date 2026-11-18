@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mini-aiohttp"
-version = "0.5.6"
+version = "0.5.7"
 description = "A lightweight asyncio HTTP toolkit with HTTP/1.1, optional HTTP/2 and HTTP/3, WebSockets, and proxy support"
 readme = "README.md"
 license = "MIT"
@@ -22,9 +22,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/hostunio16-ops/mini-aiohttp"
-Repository = "https://github.com/hostunio16-ops/mini-aiohttp"
-Changelog = "https://github.com/hostunio16-ops/mini-aiohttp/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/meenaserver123280-dotcom/mini-aiohttp"
+Repository = "https://github.com/meenaserver123280-dotcom/mini-aiohttp"
+Changelog = "https://github.com/meenaserver123280-dotcom/mini-aiohttp/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # Protocol support

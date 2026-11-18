@@ -14,14 +14,13 @@ concurrency:
 
 jobs:
   build:
-    name: Build and validate distributions
+    name: Build and validate source distribution
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name || github.ref }}
-      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -38,16 +37,16 @@ jobs:
             echo "Release tag $RELEASE_TAG does not match package version v$PACKAGE_VERSION"
             exit 1
           fi
-      - name: Build wheel and source distribution
-        run: python -m build --sdist --wheel
-      - name: Validate distributions
-        run: python -m twine check dist/*
-      - name: List built distributions
+      - name: Build source distribution
+        run: python -m build --sdist
+      - name: Validate source distribution
+        run: python -m twine check dist/*.tar.gz
+      - name: List built distribution
         run: ls -lh dist/
       - uses: actions/upload-artifact@v4
         with:
           name: python-distributions
-          path: dist/
+          path: dist/*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -72,7 +71,7 @@ jobs:
             echo "Missing repository secret: PYPI_API_TOKEN"
             exit 1
           fi
-      - name: Publish to PyPI using API token
+      - name: Publish source distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
