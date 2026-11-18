@@ -29,3 +29,11 @@ def test_native_response_serializer_matches_python(keep_alive):
         response.status, response.reason, headers, response._out_set_cookies, response.body, keep_alive
     )
     assert actual == expected
+@pytest.mark.skipif(serialize_response is None, reason="optional Rust extension is not built")
+def test_native_response_serializer_stringifies_mutated_header_values():
+    response = Response(200, b"ok")
+    response.headers["x-count"] = 7
+    response.add_set_cookie(123)
+    data = response.to_bytes()
+    assert b"X-Count: 7\\r\\n" in data
+    assert b"Set-Cookie: 123\\r\\n" in data
