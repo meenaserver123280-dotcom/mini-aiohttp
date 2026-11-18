@@ -1,3 +1,4 @@
+--- FILE SHA: 48402689b828e6190b3ce8c6e1cc1a64811fbfef ---
 """Benchmark mini-aiohttp against aiohttp with the same load generator.
 
 The load generator uses raw asyncio sockets and keep-alive HTTP/1.1, so it does not
@@ -22,6 +23,7 @@ import argparse
 import asyncio
 import os
 import socket
+import statistics
 import subprocess
 import sys
 import time
@@ -198,6 +200,7 @@ def main() -> None:
     run.add_argument("--duration", type=float, default=10.0)
     run.add_argument("--concurrency", type=int, default=64)
     run.add_argument("--warmup", type=float, default=2.0)
+    run.add_argument("--repeat", type=int, default=3)
     run.add_argument("--only", choices=sorted(PORTS), help="benchmark a single library")
 
     serve = sub.add_parser("serve", help="start one server (used internally)")
@@ -209,8 +212,32 @@ def main() -> None:
         (serve_mini if args.name == "mini" else serve_aiohttp)(args.port)
         return
 
+    if args.repeat < 1:
+        parser.error("--repeat must be at least 1")
     names = [args.only] if args.only else ["mini", "aiohttp"]
-    results = [_run_one(name, args.duration, args.concurrency, args.warmup) for name in names]
+    trials = {name: [] for name in names}
+    for trial in range(args.repeat):
+        order = names if trial % 2 == 0 else list(reversed(names))
+        for name in order:
+            result = _run_one(name, args.duration, args.concurrency, args.warmup)
+            trials[name].append(result)
+            print(
+                f"trial={trial + 1}/{args.repeat} {name}: "
+                f"{result['rps']:.0f} RPS, p50={result['p50_ms']:.2f} ms, "
+                f"p99={result['p99_ms']:.2f} ms, errors={result['errors']}"
+            )
+    results = []
+    for name, samples in trials.items():
+        results.append({
+            "name": name,
+            "requests": int(statistics.median(item["requests"] for item in samples)),
+            "errors": sum(item["errors"] for item in samples),
+            "rps": statistics.median(item["rps"] for item in samples),
+            "p50_ms": statistics.median(item["p50_ms"] for item in samples),
+            "p99_ms": statistics.median(item["p99_ms"] for item in samples),
+            "server_stderr": next((item["server_stderr"] for item in samples if item["server_stderr"]), ""),
+        })
+    print("\\nMedian across", args.repeat, "trials:")
     _print_table(results, args.duration, args.concurrency)
 
 

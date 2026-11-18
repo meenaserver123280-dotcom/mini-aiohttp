@@ -1,8 +1,9 @@
+--- FILE SHA: 11b2b1a98676e39a128ea2fef3019d7fce655050 ---
 # ⚡ mini-aiohttp
 
 **mini-aiohttp v0.5.4** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio.
 
-Designed for simplicity, performance, flexibility and security. The core has zero runtime dependencies; faster or extra features are opt-in extras.
+Designed for simplicity, performance, flexibility and security. The core keeps a pure-Python fallback. When built with Rust available, an optional PyO3 extension accelerates HTTP request-head parsing.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/Version-0.5.4-green)](https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.4)
@@ -36,7 +37,7 @@ Designed for simplicity, performance, flexibility and security. The core has zer
 - Optional HTTP/3 client/server adapters using QUIC (`pip install mini-aiohttp[http3]`).
 
 ### HTTP Server
-- Asynchronous HTTP server.
+- Asynchronous HTTP server with optional Rust-accelerated request-head parsing (pure-Python fallback supported).
 - Custom routing and path parameters.
 - Middleware support.
 - Gzip response compression middleware (`gzip_middleware`).
@@ -69,7 +70,7 @@ Designed for simplicity, performance, flexibility and security. The core has zer
 
 ---
 
-## 📦 Installation
+## 📦 Installation\n\nFor the native parser, install Rust (rustup) before installing the package so the optional extension can be compiled. Without Rust, the package automatically uses the pure-Python parser.\n
 
 Core (no dependencies):
 

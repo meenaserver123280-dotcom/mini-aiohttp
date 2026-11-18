@@ -1,3 +1,4 @@
+--- FILE SHA: bd3985bdc3c9353cd09ee8369d0612abe454f794 ---
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -12,6 +13,9 @@ fn is_token(byte: u8) -> bool {
 
 fn parse_inner(data: &[u8]) -> Result<(String, String, String, Vec<(String, String)>), &'static str> {
     let body = data.strip_suffix(b"\r\n\r\n").ok_or("Malformed request head")?;
+    if body.windows(2).any(|pair| pair[1] == b'\n' && pair[0] != b'\r') {
+        return Err("Malformed request head");
+    }
     let mut lines = body.split(|byte| *byte == b'\n')
         .map(|line| line.strip_suffix(b"\r").unwrap_or(line));
     let mut first = lines.next().unwrap_or_default();

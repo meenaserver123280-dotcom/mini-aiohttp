@@ -1,3 +1,4 @@
+--- FILE SHA: 94e1d7a70eabbef5cc822d6062707c05ddfebc5e ---
 name: Performance benchmark
 
 on:
@@ -35,7 +36,7 @@ jobs:
           DURATION: ${{ inputs.duration }}
           CONCURRENCY: ${{ inputs.concurrency }}
         run: |
-          python benchmarks/bench.py run --duration "$DURATION" --warmup 5 --concurrency "$CONCURRENCY" | tee benchmark-results.txt
+          python benchmarks/bench.py run --duration "$DURATION" --warmup 3 --concurrency "$CONCURRENCY" --repeat 3 | tee benchmark-results.txt
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
