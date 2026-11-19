@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0
+
+The same features as 0.10.0, which is already on PyPI. This release is the first to carry the 1.0.0 version number.
+
+### Added
+- `RetryPolicy` (`mini_aiohttp.retry`): retries 429 for any method, and 502/503/504 for idempotent methods. Honours a numeric `Retry-After` (capped). Otherwise uses jittered exponential backoff. Connection errors are retried for idempotent methods only. Async-iterable request bodies are never replayed.
+- `socks5_url`, `tor_proxy` (`socks5h://127.0.0.1:9050`, the Tor and Orbot default), `merge_headers` (case-insensitive, checked for header injection) and `HeaderRotator` (round-robin or shuffled presets) in `mini_aiohttp.proxy`.
+- `WebhookRouter` (`mini_aiohttp.webhook`): checks the `X-Telegram-Bot-Api-Secret-Token` header in constant time, dedupes `update_id` for a configurable TTL, replies 200 at once and runs the handler in a background task. `attach(app, path)` registers the route and `close()` waits for running handlers.
+- `TelegramPoller` and `TelegramError` (`mini_aiohttp.telegram`): `getUpdates` polling with offset tracking and error backoff. The bot token is only in the request URL and is never logged.
+- `TrafficRecorderMiddleware` (`mini_aiohttp.traffic`): optional middleware that keeps the most recent requests (`method`, `path`, `status`, `duration_ms`, `client`, `body_preview`) in a bounded buffer. `body_preview` is off by default.
+- `Response.json()` on client responses parses the body. `Response.json(data)` still builds a JSON response.
+
+### Notes
+- Load tests against real traffic are not part of this release.
+- The WebSocket connect-timeout test can still leave a pending task, which shows as a "Task was destroyed" warning. This is unchanged from 0.5.5.
+
 ## 0.10.0
 
 ### Added
@@ -59,7 +75,7 @@
 ## 0.6.1
 
 ### Added
-- Prebuilt wheels for Linux x86_64 (manylinux), macOS (x86_64 and arm64) and Windows x86_64, for Python 3.11, 3.12 and 3.13. Wheels include the optional native Rust extension (`mini_aiohttp._native`). Other platforms install from the source distribution and use the pure-Python fallback when no Rust toolchain is available.
+- Prebuilt wheels for Linux x86_64 (manylinux), macOS (x86_64 and arm64) and Windows x86_64 for Python 3.11, 3.12 and 3.13. Wheels include the optional native Rust extension (`mini_aiohttp._native`). Other platforms install from the source distribution and use the pure-Python fallback when no Rust toolchain is available.
 
 ### Packaging
 - The release workflow builds wheels with cibuildwheel and smoke-tests the native extension in each wheel before anything is uploaded.
