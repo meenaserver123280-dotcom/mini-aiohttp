@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.6.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v0.6.1** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
-Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. When a Rust toolchain is available at install time, an optional PyO3 extension accelerates HTTP request-head parsing and buffered response serialization.
+Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.6.0-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-0.6.1-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -80,7 +80,7 @@ pip install mini-aiohttp
 
 Requires Python 3.11 or newer.
 
-When a Rust toolchain is present, installing from source also builds the optional native extension (`mini_aiohttp._native`). Without Rust, the package uses its pure-Python parser and response serializer. Nothing in the API changes between the two.
+Prebuilt wheels are published for Linux x86_64, macOS (x86_64 and arm64) and Windows x86_64, on Python 3.11, 3.12 and 3.13. These wheels include the native Rust extension (`mini_aiohttp._native`). On any other platform, pip builds from the source distribution. If no Rust toolchain is available, the build still succeeds and the package uses its pure-Python parser and response serializer. Nothing in the API changes between the two.
 
 Optional extras:
 
@@ -108,7 +108,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.6.0
+pip install mini-aiohttp==0.6.1
 ```
 
 Upgrade an existing installation:
@@ -140,7 +140,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.6.0"
+        "version": "0.6.1"
     })
 
 @app.route("/hello/{name}")
@@ -730,6 +730,7 @@ python -m twine check dist/*
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`) |
 | WebSockets | Standalone RFC 6455 client/server |
 | ASGI 3 | `ASGIApp` for HTTP and lifespan (no WebSocket) |
+| Prebuilt wheels | Linux x86_64, macOS x86_64 and arm64, Windows x86_64 (CPython 3.11–3.13) |
 
 ---
 
@@ -752,6 +753,7 @@ Additional notes:
 - HTTPS proxy tunnels require a CONNECT-capable HTTP proxy or SOCKS5 proxy.
 - Streaming responses require asynchronous iterables.
 - Under `ASGIApp`, the ASGI server enforces the request-line, header-count and keep-alive limits from the first table above. `max_connections` and `read_timeout` on `Server` apply only to the built-in `start()` and `serve_forever()` path.
+- Prebuilt wheels are not published for Linux aarch64, 32-bit platforms or musl Linux. Those platforms install from the source distribution.
 
 ---
 
@@ -767,6 +769,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.6.0**
+**mini-aiohttp v0.6.1**
 
 *Lightweight. Asynchronous. Flexible.*
