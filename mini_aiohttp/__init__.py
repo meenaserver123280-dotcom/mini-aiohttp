@@ -18,7 +18,7 @@ from .static import StaticFiles
 from .templates import Template, TemplateError, TemplateLoader, html_response
 from .websocket import WebSocket, WebSocketError, WebSocketServer
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __all__ = [
     "ClientSession", "ClientError", "CookieJar", "Server", "Request", "Response",
     "UploadedFile", "RateLimiter", "cors", "ip_policy", "require_json",

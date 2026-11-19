@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+### Added
+- `Server.websocket(path)`: WebSocket endpoints served on the same port as HTTP. A GET with `Upgrade: websocket` on a matching path completes the RFC 6455 handshake and calls `handler(ws, req)`. `req.params` holds path parameters. Upgrade requests for other paths are handled as normal HTTP, and invalid handshakes get 400.
+
+### Notes
+- Middleware does not run for WebSocket connections. Check authentication and the `Origin` header inside the handler.
+- README does not yet document the same-port WebSocket API. The standalone `WebSocketServer` documentation still applies.
+
 ## 0.7.0
 
 ### Added
