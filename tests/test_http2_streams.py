@@ -1,4 +1,4 @@
-"""HTTP/2 server: concurrent streams, the stream limit and the body limit."""
+"""HTTP/2 server: concurrent streams, the concurrency limit and the body limit."""
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +30,7 @@ def certificate(tmp_path):
 
 
 async def _multiplex(port, cafile, requests):
-    """Send several requests on one connection. Return [(path, 'ok' | 'reset')] in finish order.
+    """Send several requests on one connection. Return {path: 'ok' | 'reset'} in finish order.
 
     `requests` is a list of (path, body_bytes_or_None).
     """
@@ -153,3 +153,99 @@ async def test_max_concurrent_streams_must_be_positive(tmp_path):
     context.load_cert_chain(str(cert), str(key))
     with pytest.raises(ValueError):
         HTTP2Server(lambda *a: None, ssl_context=context, max_concurrent_streams=0)
+
+
+async def _raw_connection(port, cafile):
+    context = ssl.create_default_context(cafile=cafile)
+    context.set_alpn_protocols(["h2"])
+    reader, writer = await asyncio.open_connection("127.0.0.1", port, ssl=context, server_hostname="localhost")
+    conn = h2.connection.H2Connection(h2.config.H2Configuration(client_side=True, header_encoding="utf-8"))
+    conn.initiate_connection()
+    writer.write(conn.data_to_send())
+    await writer.drain()
+    return reader, writer, conn
+
+
+async def test_idle_connection_gets_goaway_and_is_closed(tmp_path):
+    async def handler(method, path, headers, body):
+        return 200, {}, path
+
+    server, port, cert = await _server(tmp_path, handler, idle_timeout=0.3)
+    try:
+        reader, writer, conn = await _raw_connection(port, cert)
+        terminated = None
+        while terminated is None:
+            data = await asyncio.wait_for(reader.read(65536), 3)
+            if not data:
+                break
+            for event in conn.receive_data(data):
+                if isinstance(event, h2.events.ConnectionTerminated):
+                    terminated = event
+        writer.close()
+    finally:
+        await server.close()
+    assert terminated is not None, "idle connection was not closed with GOAWAY"
+    assert terminated.error_code == 0  # NO_ERROR
+
+
+async def test_graceful_close_finishes_inflight_stream_then_sends_goaway(tmp_path):
+    async def handler(method, path, headers, body):
+        await asyncio.sleep(0.3)
+        return 200, {}, "done"
+
+    server, port, cert = await _server(tmp_path, handler)
+    reader, writer, conn = await _raw_connection(port, cert)
+    sid = conn.get_next_available_stream_id()
+    conn.send_headers(sid, [(":method", "GET"), (":scheme", "https"),
+                            (":authority", "localhost"), (":path", "/work")], end_stream=True)
+    writer.write(conn.data_to_send())
+    await writer.drain()
+    await asyncio.sleep(0.05)  # let the server start the request
+
+    closing = asyncio.ensure_future(server.close(grace=2.0))
+    events = []
+    try:
+        while True:
+            data = await asyncio.wait_for(reader.read(65536), 3)
+            if not data:
+                break
+            for event in conn.receive_data(data):
+                events.append(event)
+            writer.write(conn.data_to_send())
+            await writer.drain()
+    finally:
+        writer.close()
+        await closing
+    assert any(isinstance(e, h2.events.StreamEnded) and e.stream_id == sid for e in events), \
+        "in-flight response was not delivered before shutdown"
+    terminated = [e for e in events if isinstance(e, h2.events.ConnectionTerminated)]
+    assert terminated and terminated[0].error_code == 0
+
+
+async def test_oversized_request_headers_are_refused(tmp_path):
+    async def handler(method, path, headers, body):
+        return 200, {}, "ok"
+
+    server, port, cert = await _server(tmp_path, handler, max_header_list_size=512)
+    try:
+        reader, writer, conn = await _raw_connection(port, cert)
+        sid = conn.get_next_available_stream_id()
+        conn.send_headers(sid, [(":method", "GET"), (":scheme", "https"),
+                                (":authority", "localhost"), (":path", "/"),
+                                ("x-big", "a" * 2000)], end_stream=True)
+        writer.write(conn.data_to_send())
+        await writer.drain()
+        reset = None
+        while reset is None:
+            data = await asyncio.wait_for(reader.read(65536), 3)
+            if not data:
+                break
+            for event in conn.receive_data(data):
+                if isinstance(event, h2.events.StreamReset) and event.stream_id == sid:
+                    reset = event
+            writer.write(conn.data_to_send())
+            await writer.drain()
+        writer.close()
+    finally:
+        await server.close()
+    assert reset is not None, "oversized headers were not refused"

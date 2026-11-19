@@ -98,43 +98,81 @@ class HTTP2Client:
         return await asyncio.wait_for(exchange(), self.timeout)
 
 
+class _Connection:
+    """Server-side state for one HTTP/2 connection, used for shutdown and tests."""
+
+    def __init__(self, conn, writer, flush):
+        self.conn = conn
+        self.writer = writer
+        self.flush = flush
+        self.tasks: set = set()
+
+
 class HTTP2Server:
-    """HTTP/2-only TLS server with concurrent streams per connection.
+    """HTTP/2-only TLS server with concurrent streams, limits and graceful shutdown.
 
     Handler signature: async handler(method, path, headers, body) -> (status, headers, body).
 
-    Each stream's handler runs in its own task, so a slow request does not block other
-    streams on the same connection. `max_concurrent_streams` is advertised in SETTINGS and
-    enforced by the protocol layer: a peer that opens more streams than advertised is a
-    protocol error, so the connection gets GOAWAY and is closed (RFC 9113, section 5.1.2).
-    A stream whose body exceeds `max_body_size` is reset with ENHANCE_YOUR_CALM, and other
-    streams on the connection continue.
+    Behaviour:
+    - Each stream's handler runs in its own task, so a slow stream does not block others.
+    - `max_concurrent_streams` is advertised and enforced. A peer that exceeds it is a
+      protocol error: the connection gets GOAWAY(PROTOCOL_ERROR) and is closed.
+    - `max_header_list_size` limits the size of request headers. Larger requests are
+      refused with a connection error (RFC 9113, section 6.5.2).
+    - A stream whose body exceeds `max_body_size` is reset (ENHANCE_YOUR_CALM), and other
+      streams on the connection continue.
+    - A connection with no bytes received for `idle_timeout` seconds gets GOAWAY(NO_ERROR)
+      and is closed.
+    - `close(grace=...)` stops accepting, sends GOAWAY(NO_ERROR) on every open connection,
+      lets in-flight streams finish for up to `grace` seconds, then closes what is left.
+      Requests that arrive after GOAWAY are refused with REFUSED_STREAM.
     """
 
-    def __init__(self, handler, *, ssl_context, max_body_size=10 * 1024 * 1024, max_concurrent_streams=100):
+    def __init__(
+        self,
+        handler,
+        *,
+        ssl_context,
+        max_body_size=10 * 1024 * 1024,
+        max_concurrent_streams=100,
+        max_header_list_size=64 * 1024,
+        idle_timeout=30.0,
+    ):
         if max_concurrent_streams < 1:
             raise ValueError("max_concurrent_streams must be at least 1")
+        if max_header_list_size < 1:
+            raise ValueError("max_header_list_size must be at least 1")
+        if idle_timeout <= 0:
+            raise ValueError("idle_timeout must be positive")
         self.handler = handler
         self.ssl_context = ssl_context
         self.max_body_size = max_body_size
         self.max_concurrent_streams = max_concurrent_streams
+        self.max_header_list_size = max_header_list_size
+        self.idle_timeout = idle_timeout
         self._server = None
+        self._connections: set = set()
+        self._draining = False
         self.ssl_context.set_alpn_protocols(["h2"])
 
     async def _connection(self, reader, writer):
         h2 = _require_h2()
         from h2.settings import Settings, SettingCodes
 
+        if self._draining:
+            writer.close()
+            return
         config = h2.config.H2Configuration(client_side=False, header_encoding="utf-8")
         conn = h2.connection.H2Connection(config=config)
         conn.local_settings = Settings(
             client=False,
-            initial_values={SettingCodes.MAX_CONCURRENT_STREAMS: self.max_concurrent_streams},
+            initial_values={
+                SettingCodes.MAX_CONCURRENT_STREAMS: self.max_concurrent_streams,
+                SettingCodes.MAX_HEADER_LIST_SIZE: self.max_header_list_size,
+            },
         )
         # asyncio's drain() cannot run concurrently, and several stream tasks may flush.
         flush_lock = asyncio.Lock()
-        streams: dict = {}  # stream_id -> {"headers": ..., "body": bytearray}
-        tasks: set = set()
 
         async def flush():
             async with flush_lock:
@@ -142,6 +180,10 @@ class HTTP2Server:
                 if pending:
                     writer.write(pending)
                     await writer.drain()
+
+        state = _Connection(conn, writer, flush)
+        self._connections.add(state)
+        streams: dict = {}  # stream_id -> {"headers": ..., "body": bytearray}
 
         async def answer(stream_id, headers, body):
             method = headers.get(":method", "GET")
@@ -165,39 +207,53 @@ class HTTP2Server:
 
         def start_answer(stream_id, headers, body):
             task = asyncio.ensure_future(answer(stream_id, headers, body))
-            tasks.add(task)
-            task.add_done_callback(tasks.discard)
+            state.tasks.add(task)
+            task.add_done_callback(state.tasks.discard)
 
         try:
             conn.initiate_connection()
             await flush()
             while True:
-                data = await reader.read(65536)
+                try:
+                    async with asyncio.timeout(self.idle_timeout):
+                        data = await reader.read(65536)
+                except TimeoutError:
+                    conn.close_connection(error_code=0)  # NO_ERROR: idle for too long
+                    await flush()
+                    return
                 if not data:
                     return
                 for event in conn.receive_data(data):
                     if isinstance(event, h2.events.RequestReceived):
+                        if self._draining:
+                            conn.reset_stream(event.stream_id, error_code=7)  # REFUSED_STREAM
+                            continue
+                        # RFC 9113 6.5.2: size of a header list is name + value + 32 bytes per field.
+                        header_size = sum(len(k) + len(v) + 32 for k, v in event.headers)
+                        if header_size > self.max_header_list_size:
+                            conn.reset_stream(event.stream_id, error_code=11)  # ENHANCE_YOUR_CALM
+                            continue
                         streams[event.stream_id] = {"headers": dict(event.headers), "body": bytearray()}
                     elif isinstance(event, h2.events.DataReceived):
-                        state = streams.get(event.stream_id)
-                        if state is None:
+                        stream = streams.get(event.stream_id)
+                        if stream is None:
                             continue
-                        state["body"].extend(event.data)
+                        stream["body"].extend(event.data)
                         conn.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
-                        if len(state["body"]) > self.max_body_size:
+                        if len(stream["body"]) > self.max_body_size:
                             conn.reset_stream(event.stream_id, error_code=11)  # ENHANCE_YOUR_CALM
                             streams.pop(event.stream_id, None)
                     elif isinstance(event, h2.events.StreamEnded):
-                        state = streams.pop(event.stream_id, None)
-                        if state is None:
+                        stream = streams.pop(event.stream_id, None)
+                        if stream is None:
                             continue
-                        start_answer(event.stream_id, state["headers"], bytes(state["body"]))
+                        start_answer(event.stream_id, stream["headers"], bytes(stream["body"]))
                     elif isinstance(event, h2.events.StreamReset):
                         streams.pop(event.stream_id, None)
                 await flush()
         except h2.exceptions.H2Error:
-            # Malformed frames or protocol violations from this client. Send GOAWAY so the
-            # client knows why, then drop only this connection. Never let it reach the loop.
+            # Malformed frames, oversized headers or limit violations: tell the client why,
+            # then drop only this connection. Never let it reach the event loop.
             try:
                 conn.close_connection(error_code=1)  # PROTOCOL_ERROR
                 await flush()
@@ -206,10 +262,13 @@ class HTTP2Server:
         except (ConnectionError, OSError, asyncio.IncompleteReadError):
             pass
         finally:
-            for task in list(tasks):
-                task.cancel()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+            self._connections.discard(state)
+            # Let streams that are still running finish when we are draining; cancel otherwise.
+            if not self._draining:
+                for task in list(state.tasks):
+                    task.cancel()
+            if state.tasks:
+                await asyncio.gather(*list(state.tasks), return_exceptions=True)
             writer.close()
             try:
                 await writer.wait_closed()
@@ -222,9 +281,31 @@ class HTTP2Server:
         )
         return self._server
 
-    async def close(self):
+    @property
+    def port(self) -> int:
+        return self._server.sockets[0].getsockname()[1]
+
+    async def close(self, *, grace: float = 5.0):
+        """Stop accepting, send GOAWAY(NO_ERROR) to open connections, wait up to `grace`, then close."""
+        self._draining = True
         if self._server is not None:
             self._server.close()
+        # Let in-flight streams finish first. h2 forbids sending on a connection after
+        # GOAWAY, so GOAWAY is sent only once the responses are out.
+        tasks = set().union(*(state.tasks for state in self._connections)) if self._connections else set()
+        if tasks:
+            await asyncio.wait(tasks, timeout=grace)
+        for state in list(self._connections):
+            try:
+                state.conn.close_connection(error_code=0)  # NO_ERROR
+                await state.flush()
+            except Exception:
+                pass
+        for state in list(self._connections):
+            for task in list(state.tasks):
+                task.cancel()
+            state.writer.close()
+        if self._server is not None:
             await self._server.wait_closed()
             self._server = None
 
