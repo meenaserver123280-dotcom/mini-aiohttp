@@ -364,19 +364,22 @@ python -m twine check dist/*
 
 ## 🛡️ Protocol Limitations
 
+- HTTP/2 adapter currently uses one request per connection, and requires TLS ALPN negotiation.
+- HTTP/3 requires QUIC/UDP and TLS 1.3 certificates, plus an HTTP/3-capable endpoint. It cannot be transparently substituted on arbitrary TCP connections.
+- WebSocket server is not mounted as a route on the HTTP/1.1 `Server` class. WebSocket support is standalone.
+- WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
+- WebSocket compression (`permessage-deflate`) is not implemented.
+- Static files do not support `Range` requests or `ETag` yet.
+- No automatic multi-process worker manager is included.
+- ASGI compatibility (running under uvicorn or gunicorn) is not provided.
+
+Additional notes:
+
 - HTTP/2 and HTTP/3 are optional adapters and require their respective extras.
-- HTTP/2 requires TLS ALPN negotiation; the adapter currently uses one request per connection.
 - `AutoClientSession` uses HTTP/2 only when no custom `ssl_context` is given.
-- HTTP/3 requires QUIC/UDP, TLS 1.3 certificates and an HTTP/3-capable endpoint; it cannot be transparently substituted on arbitrary TCP connections.
-- WebSocket support is standalone and is not mounted as a route on the HTTP/1.1 `Server` class.
-- WebSocket servers do not check the `Origin` header; if you authenticate with cookies, validate `Origin` in your handler.
-- WebSocket `permessage-deflate` (compression) is not implemented yet.
-- The server does not answer `HEAD` requests yet, and static files do not support `Range` requests or `ETag` yet.
 - `max_response_size` limits encoded and decoded response sizes. Gzip/deflate use zlib's bounded-output API; Brotli's Python decoder has no output-length parameter, so its output is checked after each decoder call rather than hard-capped during allocation.
 - HTTPS proxy tunnels require a CONNECT-capable HTTP proxy or SOCKS5 proxy.
 - Streaming responses require asynchronous iterables.
-- No automatic multi-process worker manager is included.
-- ASGI compatibility (running under uvicorn or gunicorn) is not provided.
 
 ---
 
