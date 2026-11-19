@@ -10,12 +10,17 @@ from .forms import FormError, parse_urlencoded
 from .http2 import HTTP2Client, HTTP2Server
 from .http3 import HTTP3Client, HTTP3Server
 from .multipart import UploadedFile
+from .proxy import HeaderRotator, merge_headers, socks5_url, tor_proxy
 from .response import Request, Response
+from .retry import RetryPolicy
 from .security import RateLimiter, cors, ip_policy, require_json, security_headers, set_cookie
 from .server import Server
 from .sessions import Session, SessionMiddleware
 from .static import StaticFiles
+from .telegram import TelegramError, TelegramPoller
 from .templates import Template, TemplateError, TemplateLoader, html_response
+from .traffic import TrafficRecorderMiddleware
+from .webhook import WebhookRouter
 from .websocket import WebSocket, WebSocketError, WebSocketServer
 
 __version__ = "0.9.0"
@@ -28,4 +33,6 @@ __all__ = [
     "ASGIApp",
     "StaticFiles", "Session", "SessionMiddleware", "FormError", "parse_urlencoded",
     "Template", "TemplateLoader", "TemplateError", "html_response",
+    "RetryPolicy", "socks5_url", "tor_proxy", "HeaderRotator", "merge_headers",
+    "TrafficRecorderMiddleware", "WebhookRouter", "TelegramPoller", "TelegramError",
 ]

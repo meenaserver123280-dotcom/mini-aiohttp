@@ -82,6 +82,30 @@ class Request:
         return parse_multipart(self.body, self.headers.get("content-type", ""))
 
 
+class _JsonAccessor:
+    """`Response.json` works both ways.
+
+    - `Response.json(data, status=200)` builds a JSON response (server side).
+    - `response.json()` parses the body of a response you received (client side).
+    """
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            def build(data, status: int = 200):
+                return objtype(
+                    status,
+                    _optional.json_dumps(data),
+                    {"Content-Type": "application/json; charset=utf-8"},
+                )
+            return build
+
+        def parse():
+            if obj._chunks is not None:
+                raise RuntimeError("streamed body not read yet; call await aread() first")
+            return _optional.json_loads(obj.body)
+        return parse
+
+
 class Response:
     def __init__(self, status: int = 200, body=b"", headers: dict | None = None):
         self.status = status
@@ -109,13 +133,8 @@ class Response:
         response._out_chunks = chunks
         return response
 
-    @classmethod
-    def json(cls, data, status: int = 200) -> "Response":
-        return cls(
-            status,
-            _optional.json_dumps(data),
-            {"Content-Type": "application/json; charset=utf-8"},
-        )
+    # Response.json(data) builds a response; response.json() parses one. See _JsonAccessor.
+    json = _JsonAccessor()
 
     def text(self, encoding: str = "utf-8") -> str:
         """Body decoded as text. Only for buffered responses; use aread() for streams first."""
