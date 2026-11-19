@@ -5,4 +5,5 @@ jobs:
   noop:
     runs-on: ubuntu-latest
     steps:
-      - run: echo ok
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup target add x86_64-apple-darwin
