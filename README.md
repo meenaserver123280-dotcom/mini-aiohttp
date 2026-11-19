@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.5.9** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3 and WebSocket support.
+**mini-aiohttp v0.6.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. When a Rust toolchain is available at install time, an optional PyO3 extension accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.5.9-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-0.6.0-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -39,6 +39,7 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Asynchronous HTTP server with optional Rust-accelerated request parsing and response serialization (pure-Python fallbacks supported).
 - Custom routing and path parameters.
 - Middleware support.
+- ASGI 3 adapter (`ASGIApp`) for uvicorn, hypercorn and other ASGI servers.
 - Gzip response compression middleware (`gzip_middleware`).
 - HTTP/1.1 persistent connections.
 - Chunked request-body decoding.
@@ -107,7 +108,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.5.9
+pip install mini-aiohttp==0.6.0
 ```
 
 Upgrade an existing installation:
@@ -139,7 +140,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.5.9"
+        "version": "0.6.0"
     })
 
 @app.route("/hello/{name}")
@@ -157,6 +158,26 @@ async def main():
         await app.close()
 
 asyncio.run(main())
+```
+
+### Run under uvicorn (ASGI)
+
+```python
+# myapp.py
+from mini_aiohttp import ASGIApp, Response, Server
+
+server = Server()
+
+@server.route("/hello/{name}")
+async def hello(req):
+    return Response.json({"hello": req.params["name"]})
+
+asgi_app = ASGIApp(server)
+```
+
+```bash
+pip install uvicorn
+uvicorn myapp:asgi_app --host 127.0.0.1 --port 8000
 ```
 
 ### HTTP Client
@@ -314,6 +335,50 @@ Response(status=200, body=b"", headers=None)
 - `reason`, `is_streaming`: status reason phrase and streaming flag.
 
 On the client side, a `Response` also has `status`, `headers` (lowercase names), `body` (bytes), `set_cookies` (raw `Set-Cookie` values) and these methods for streamed bodies: `iter_chunks()`, `aread()` and `aclose()`. `text()` on a streamed response raises `RuntimeError` until `aread()` has been called. To parse a JSON body on the client, use `json.loads(response.body)`. `Response.json` is a constructor for server responses, not an instance method.
+
+### ASGI adapter
+
+```python
+from mini_aiohttp import ASGIApp
+
+ASGIApp(server, *, on_startup=None, on_shutdown=None)
+```
+
+`ASGIApp` wraps a `Server` so that any ASGI 3 server can run it: uvicorn, hypercorn and similar. The adapter does no routing of its own. Routes, middleware, static files and the 404, 405 and 500 responses all come from `Server`.
+
+| Area | Behaviour |
+|---|---|
+| HTTP requests | Go through the same dispatch code as the built-in server, so middleware runs for every request. |
+| Path | Uses the ASGI `raw_path` when provided, so percent-escapes are decoded once, as on the built-in server. |
+| Request body | Larger than `max_body_size` gets 413 before routing, as on the built-in server. |
+| HEAD | The body is dropped and `Content-Length` is kept. |
+| Streaming | `Response.stream` chunks are passed to the ASGI server, which does the chunked framing. |
+| Framing headers | Your `Content-Length` and `Transfer-Encoding` headers are ignored, because the ASGI server sets framing. |
+| Client disconnect | No response is sent. |
+| Lifespan | `on_startup` and `on_shutdown` run once each. If one raises, the server receives a `lifespan.*.failed` message. |
+| WebSocket | Refused with a close before accept. Use `WebSocketServer` on its own port. |
+| Limits | Request-line length, header count, idle timeout and connection cap are enforced by the ASGI server, not by `Server`. `max_body_size` still applies. |
+| Statistics | Requests served through `ASGIApp` are counted in `server.stats`. |
+
+Example:
+
+```python
+from mini_aiohttp import ASGIApp, Response, Server
+
+server = Server()
+
+@server.route("/users/{user_id}")
+async def user(req):
+    return Response.json({"id": req.params["user_id"]})
+
+async def open_resources():
+    ...  # e.g. create a database pool
+
+async def close_resources():
+    ...  # e.g. close it
+
+asgi_app = ASGIApp(server, on_startup=open_resources, on_shutdown=close_resources)
+```
 
 ### ClientSession
 
@@ -664,6 +729,7 @@ python -m twine check dist/*
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`) |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`) |
 | WebSockets | Standalone RFC 6455 client/server |
+| ASGI 3 | `ASGIApp` for HTTP and lifespan (no WebSocket) |
 
 ---
 
@@ -675,8 +741,8 @@ python -m twine check dist/*
 - WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
 - WebSocket compression (`permessage-deflate`) is not implemented.
 - Static files do not support `Range` requests or `ETag` yet.
-- No automatic multi-process worker manager is included.
-- ASGI compatibility (running under uvicorn or gunicorn) is not provided.
+- No automatic multi-process worker manager is included. Use your ASGI server's worker options (for example `uvicorn --workers`) with `ASGIApp`.
+- WebSockets are not available through `ASGIApp`. Run `WebSocketServer` on its own port.
 
 Additional notes:
 
@@ -685,6 +751,7 @@ Additional notes:
 - `max_response_size` limits encoded and decoded response sizes. Gzip/deflate use zlib's bounded-output API; Brotli's Python decoder has no output-length parameter, so its output is checked after each decoder call rather than hard-capped during allocation.
 - HTTPS proxy tunnels require a CONNECT-capable HTTP proxy or SOCKS5 proxy.
 - Streaming responses require asynchronous iterables.
+- Under `ASGIApp`, the ASGI server enforces the request-line, header-count and keep-alive limits from the first table above. `max_connections` and `read_timeout` on `Server` apply only to the built-in `start()` and `serve_forever()` path.
 
 ---
 
@@ -700,6 +767,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.5.9**
+**mini-aiohttp v0.6.0**
 
 *Lightweight. Asynchronous. Flexible.*
