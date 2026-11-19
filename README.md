@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.9.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v0.10.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.9.0-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-0.10.0-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -17,29 +17,32 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Connection pooling and keep-alive.
 - Per-host concurrency limits.
 - Automatic redirect handling.
-- Bounded retries for idempotent methods.
+- Bounded retries for idempotent methods, and a `RetryPolicy` helper for 429 and 502/503/504.
 - Cookie management, including Max-Age expiry.
 - Automatic decoding of `gzip`, `deflate` and (with an extra) `br` responses.
 - Streaming response downloads.
 - Async streaming uploads.
 - Multipart form and file uploads.
-- HTTP and SOCKS5/SOCKS5h proxies, including HTTPS CONNECT/tunnelling.
+- HTTP and SOCKS5/SOCKS5h proxies, including HTTPS CONNECT/tunnelling, and a Tor/Orbot preset.
 - DNS caching.
 - Configurable connection and request timeouts.
 - TLS context customization, and optional certifi CA bundle.
 - Request and response hooks.
 - Response size limits.
+- JSON parsing on responses (`response.json()`).
 
 - Standalone WebSocket client and server (`ws://` / `wss://`).
 - Automatic HTTPS client: ALPN selects HTTP/2 when available, otherwise HTTP/1.1; Alt-Svc enables HTTP/3 on subsequent requests (`AutoClientSession`).
 - Optional HTTP/2 client/server adapters using ALPN, with pooled connections and parallel streams (`pip install mini-aiohttp[http2]`).
 - Optional HTTP/3 client/server adapters using QUIC, with pooled connections and parallel streams (`pip install mini-aiohttp[http3]`).
+- Telegram Bot API polling (`TelegramPoller`).
 
 ### HTTP Server
 - Asynchronous HTTP server with optional Rust-accelerated request parsing and response serialization (pure-Python fallbacks supported).
 - Custom routing and path parameters.
-- Middleware support.
+- Middleware support, including a traffic recorder for inspecting recent requests.
 - WebSocket endpoints on the HTTP port (`Server.websocket`).
+- Webhook receiver with secret token check, update deduplication and background dispatch (`WebhookRouter`).
 - ASGI 3 adapter (`ASGIApp`) for uvicorn, hypercorn and other ASGI servers.
 - Gzip response compression middleware (`gzip_middleware`).
 - HTTP/1.1 persistent connections.
@@ -113,7 +116,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.9.0
+pip install mini-aiohttp==0.10.0
 ```
 
 Upgrade an existing installation:
@@ -145,7 +148,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.9.0"
+        "version": "0.10.0"
     })
 
 @app.route("/hello/{name}")
@@ -409,7 +412,7 @@ Response(status=200, body=b"", headers=None)
 - `text(encoding="utf-8")`: body as text, for buffered responses.
 - `reason`, `is_streaming`: status reason phrase and streaming flag.
 
-On the client side, a `Response` also has `status`, `headers` (lowercase names), `body` (bytes), `set_cookies` (raw `Set-Cookie` values) and these methods for streamed bodies: `iter_chunks()`, `aread()` and `aclose()`. `text()` on a streamed response raises `RuntimeError` until `aread()` has been called. To parse a JSON body on the client, use `json.loads(response.body)`. `Response.json` is a constructor for server responses, not an instance method.
+On the client side, a `Response` also has `status`, `headers` (lowercase names), `body` (bytes), `set_cookies` (raw `Set-Cookie` values) and these methods for streamed bodies: `iter_chunks()`, `aread()` and `aclose()`. `text()` on a streamed response raises `RuntimeError` until `aread()` has been called. `response.json()` parses the body (see Parsing responses below).
 
 ### Static files: `StaticFiles`
 
@@ -575,7 +578,7 @@ Use it as an async context manager, or call `close()` yourself.
 **Defaults and behaviour:**
 - Default headers: `Host`, `User-Agent`, `Accept: */*`, and `Accept-Encoding: gzip, deflate` (plus `br` when the brotli extra is installed). A caller header with the same name, in any case, replaces the default.
 - You cannot set `Content-Length` or `Transfer-Encoding` yourself. The client raises `ValueError`.
-- Retries (`retries`) apply only to GET, HEAD, PUT, DELETE, OPTIONS and TRACE, and never to streaming bodies. POST and PATCH are never retried. Backoff is exponential, capped at 10 seconds. A numeric `Retry-After` is honoured up to 60 seconds.
+- Retries (`retries`) apply only to GET, HEAD, PUT, DELETE, OPTIONS and TRACE, and never to streaming bodies. POST and PATCH are never retried. Backoff is exponential, capped at 10 seconds. A numeric `Retry-After` is honoured up to 60 seconds. For more control, use `RetryPolicy` (below).
 - Redirects (301, 302, 303, 307, 308) are followed up to `max_redirects`. 303 becomes GET. 301 and 302 become GET when sent as POST. A streaming body cannot be replayed for 307 or 308. `Authorization` and `Proxy-Authorization` are removed when the redirect goes to another origin. Only http and https targets are followed.
 - Response bodies are decoded for `gzip`, `deflate` and `br`. After decoding, `content-encoding` and `content-length` are removed from `headers`.
 - Bodies larger than `max_response_size` raise `ClientError`. Pass `None` to disable the limit.
@@ -615,6 +618,100 @@ results = await fetch_all([
     {"method": "GET", "url": "https://example.com/c"},
 ])
 ```
+
+### Retry policy: `RetryPolicy`
+
+```python
+from mini_aiohttp import ClientSession, RetryPolicy
+
+policy = RetryPolicy(max_retries=3, base_delay=0.25, max_delay=10.0)
+async with ClientSession() as session:
+    response = await policy.send(session, "GET", "https://example.com/api")
+```
+
+- 429 is retried for every method, because the server rejected the request before processing it.
+- 502, 503 and 504 are retried only for GET, HEAD, PUT, DELETE, OPTIONS and TRACE.
+- A numeric `Retry-After` header is honoured, capped at `retry_after_cap` (60 seconds). Otherwise the delay is exponential backoff with full jitter, capped at `max_delay`. An HTTP-date `Retry-After` falls back to backoff.
+- Connection errors and timeouts are retried for idempotent methods only. Async-iterable request bodies are never replayed.
+- When the budget runs out, `send` returns the last response (or raises the last connection error).
+
+### Proxies and headers
+
+```python
+from mini_aiohttp import ClientSession, HeaderRotator, merge_headers, socks5_url, tor_proxy
+```
+
+- `tor_proxy(host="127.0.0.1", port=9050)` returns `socks5h://127.0.0.1:9050`, the Tor and Orbot default. Use it as `ClientSession(proxy=tor_proxy())`. The `socks5h` scheme sends DNS lookups through the proxy.
+- `socks5_url(host, port, *, username=None, password=None, remote_dns=True)` builds a SOCKS5 URL and percent-encodes the credentials.
+- `merge_headers(*sources)` merges header dicts. A later name replaces an earlier one, ignoring case. Values are checked for header injection.
+- `HeaderRotator(presets, *, shuffle=False, seed=None)`: `next()` returns a copy of the next preset, round robin, or a random one with `shuffle=True`.
+
+```python
+rotator = HeaderRotator([{"User-Agent": "agent-a"}, {"User-Agent": "agent-b"}])
+headers = merge_headers({"Accept": "application/json"}, rotator.next(), {"X-Debug": "1"})
+```
+
+### Webhooks: `WebhookRouter`
+
+```python
+from mini_aiohttp import Server, WebhookRouter
+
+async def on_update(update: dict) -> None:
+    ...
+
+app = Server()
+router = WebhookRouter(on_update, secret_token=os.environ["WEBHOOK_SECRET"])
+router.attach(app, "/webhook")
+# on shutdown:
+await router.close()
+```
+
+- The `X-Telegram-Bot-Api-Secret-Token` header is checked in constant time. A missing or wrong token gets 403. Pass `secret_header=` for other providers.
+- Invalid JSON, or a body that is not a JSON object, gets 400.
+- A valid update gets 200 `{"ok": true}` at once. The handler runs in a background task.
+- Recent `update_id` values are remembered for `dedupe_ttl` seconds (default 1 hour, up to `dedupe_size` entries). A repeat gets 200 with `"duplicate": true` and is not dispatched again.
+- Handler errors are logged and never reach the client. At most `max_tasks` handlers run at once. Beyond that the webhook answers 503 and Telegram retries later.
+
+### Telegram polling: `TelegramPoller`
+
+```python
+from mini_aiohttp import ClientSession, TelegramPoller
+
+async with ClientSession() as session:
+    poller = TelegramPoller(session, token, on_update, timeout=25)
+    await poller.run()   # call poller.stop() to end the loop
+```
+
+- Calls `getUpdates` with an offset, so each update is handled once. The offset moves past an update before its handler runs.
+- Network errors and Telegram errors are logged by class name, and polling continues after a short backoff.
+- The token appears only in the request URL and is never logged.
+- Do not poll and use a webhook for the same bot at the same time.
+
+### Traffic recorder: `TrafficRecorderMiddleware`
+
+```python
+from mini_aiohttp import Server, TrafficRecorderMiddleware
+
+recorder = TrafficRecorderMiddleware(maxlen=500, body_preview=200)
+app = Server()
+app.middleware_(recorder)
+
+for entry in recorder.records:
+    print(entry["method"], entry["path"], entry["status"], entry["duration_ms"])
+```
+
+- Each record has `method`, `path`, `status`, `duration_ms`, `client` and `body_preview`. The list is oldest first.
+- `body_preview` is 0 bytes by default. Request bodies can contain passwords and tokens, so turn it on only while debugging.
+- A handler that raises is recorded as status 500. `clear()` empties the buffer.
+
+### Parsing responses: `response.json()`
+
+```python
+response = await session.get("https://api.example.com/items")
+items = response.json()
+```
+
+`response.json()` parses the body of a response you received. `Response.json(data, status=200)` still builds a JSON response on the server, and the same name works both ways. Parsing a streamed body needs `await response.aread()` first.
 
 ### Cookies
 
@@ -837,6 +934,7 @@ Each extra imports its package only when it is used.
 - `WebSocketError`: WebSocket handshake, frame and connection errors.
 - `FormError`: a form body that cannot be parsed. It has a `status` for the response.
 - `TemplateError`: a missing template, or a variable missing from the template context.
+- `TelegramError`: Telegram answered with `ok=false`, or with an unexpected reply. Its `description` attribute holds Telegram's message.
 - `ValueError`: invalid arguments, such as an unsupported URL scheme, an invalid header, or a session secret shorter than 32 bytes.
 - The server never lets a handler exception reach the client. It returns 500 and logs the traceback.
 
@@ -956,7 +1054,9 @@ python -m twine check dist/*
 | Static files | `StaticFiles`: Range (single range), ETag, Last-Modified, conditional GET |
 | Sessions | `SessionMiddleware`: signed cookies, HMAC-SHA256 |
 | Forms and templates | `parse_urlencoded`, `Template`, `TemplateLoader` |
-| SOCKS5 | Yes, HTTP targets |
+| Retries | `RetryPolicy`: 429 and 502/503/504 with Retry-After and jittered backoff |
+| SOCKS5 and Tor | Yes, HTTP targets; `tor_proxy()` preset |
+| Webhooks and Telegram | `WebhookRouter`, `TelegramPoller` |
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`): pooled client, parallel streams, limits, graceful close |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`): pooled client, parallel streams, limits, graceful close |
 | WebSockets | RFC 6455 client; server on the HTTP port (`Server.websocket`) or standalone (`WebSocketServer`) |
@@ -979,6 +1079,7 @@ python -m twine check dist/*
 - The template engine has no loops, conditions or template inheritance. Use Python for logic.
 - No automatic multi-process worker manager is included. Use your ASGI server's worker options (for example `uvicorn --workers`) with `ASGIApp`.
 - WebSockets are not available through `ASGIApp`. Use `Server.websocket` on the built-in server, or run `WebSocketServer` on its own port.
+- `TelegramPoller` and `WebhookRouter` do not handle Telegram's file downloads or payment flows. They only deliver updates to your handler.
 
 Additional notes:
 
@@ -1004,6 +1105,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.9.0**
+**mini-aiohttp v0.10.0**
 
 *Lightweight. Asynchronous. Flexible.*
