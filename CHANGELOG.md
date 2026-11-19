@@ -75,7 +75,7 @@ The same features as 0.10.0, which is already on PyPI. This release is the first
 ## 0.6.1
 
 ### Added
-- Prebuilt wheels for Linux x86_64 (manylinux), macOS (x86_64 and arm64) and Windows x86_64 for Python 3.11, 3.12 and 3.13. Wheels include the optional native Rust extension (`mini_aiohttp._native`). Other platforms install from the source distribution and use the pure-Python fallback when no Rust toolchain is available.
+- Prebuilt wheels for Linux x86_64 (manylinux), macOS (x86_64 and arm64) and Windows x86_64, for Python 3.11, 3.12 and 3.13. Wheels include the optional native Rust extension (`mini_aiohttp._native`). Other platforms install from the source distribution and use the pure-Python fallback when no Rust toolchain is available.
 
 ### Packaging
 - The release workflow builds wheels with cibuildwheel and smoke-tests the native extension in each wheel before anything is uploaded.
