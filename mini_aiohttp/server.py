@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from .response import Request, Response, check_header
+from .websocket import WebSocket, WebSocketError
 
 try:
     from ._native import parse_request_head as _native_parse_request_head
@@ -171,6 +172,7 @@ class Server:
         self._exact_routes: dict = {}  # (method, decoded path segments) -> handler
         self._exact_paths: set = set()  # decoded paths registered for any method
         self._param_routes: list = []  # parameterized routes only
+        self._ws_routes: list = []     # (pattern_segments, handler) for WebSocket endpoints
         self.middleware: list = []   # async fn(request, call_next) -> Response
         self.max_connections = max_connections
         self.read_timeout = read_timeout
@@ -206,6 +208,19 @@ class Server:
                 # Preserve the original first-registration-wins behavior.
                 self._exact_routes.setdefault((method_name, key), handler)
                 self._exact_paths.add(key)
+            return handler
+        return decorator
+
+    def websocket(self, path: str):
+        """Register a WebSocket endpoint on this server's HTTP port. Use {name} for path parameters.
+
+        The handler is ``async def handler(ws, req)``. It receives the connection after the
+        101 handshake, and ``req.params`` holds the path parameters. Middleware does NOT run
+        for WebSocket connections, so check authentication and the ``Origin`` header inside
+        the handler.
+        """
+        def decorator(handler):
+            self._ws_routes.append((_split_path(path), handler))
             return handler
         return decorator
 
@@ -354,12 +369,51 @@ class Server:
             request.client = client_ip
             self._total_requests += 1
 
+            if self._ws_routes and request.method == "GET" and request.headers.get("upgrade", "").lower() == "websocket":
+                if await self._serve_websocket(request, reader, writer):
+                    return  # the WebSocket owns the connection now
+
             keep_alive = self._wants_keep_alive(request) and not self._draining
             response = await self._dispatch(request)
             self._status_counts[response.status] = self._status_counts.get(response.status, 0) + 1
             keep_alive = await self._send(writer, response, keep_alive, head_only=request.method == "HEAD")
             if not keep_alive:
                 return
+
+    async def _serve_websocket(self, req: Request, reader, writer) -> bool:
+        """Run a registered WebSocket endpoint on this connection.
+
+        Returns False when no WebSocket route matches, so the request is handled as plain HTTP.
+        """
+        segments = tuple(_split_path(req.path))
+        params = None
+        for pattern, handler in self._ws_routes:
+            params = _match_pattern(pattern, segments)
+            if params is not None:
+                break
+        else:
+            return False
+        req.params = params
+        try:
+            websocket = await WebSocket.accept(reader, writer, req.headers)
+        except WebSocketError as exc:
+            await self._send(writer, Response(400, str(exc)), keep_alive=False)
+            return True
+        code = 1000
+        try:
+            await handler(websocket, req)
+        except (ConnectionError, OSError, WebSocketError):
+            pass  # peer went away; nothing more to send
+        except Exception:
+            log.exception("websocket handler failed: %s", req.path)
+            code = 1011  # internal error
+        finally:
+            if not websocket.closed:
+                try:
+                    await websocket.close(code)
+                except Exception:
+                    writer.close()
+        return True
 
     async def _read_headers(self, reader) -> dict:
         headers: dict = {}
