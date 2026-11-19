@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.8.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v0.9.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.8.0-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-0.9.0-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -32,8 +32,8 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 
 - Standalone WebSocket client and server (`ws://` / `wss://`).
 - Automatic HTTPS client: ALPN selects HTTP/2 when available, otherwise HTTP/1.1; Alt-Svc enables HTTP/3 on subsequent requests (`AutoClientSession`).
-- Optional HTTP/2 client/server adapters using ALPN (`pip install mini-aiohttp[http2]`).
-- Optional HTTP/3 client/server adapters using QUIC (`pip install mini-aiohttp[http3]`).
+- Optional HTTP/2 client/server adapters using ALPN, with pooled connections and parallel streams (`pip install mini-aiohttp[http2]`).
+- Optional HTTP/3 client/server adapters using QUIC, with pooled connections and parallel streams (`pip install mini-aiohttp[http3]`).
 
 ### HTTP Server
 - Asynchronous HTTP server with optional Rust-accelerated request parsing and response serialization (pure-Python fallbacks supported).
@@ -113,7 +113,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.8.0
+pip install mini-aiohttp==0.9.0
 ```
 
 Upgrade an existing installation:
@@ -145,7 +145,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.8.0"
+        "version": "0.9.0"
     })
 
 @app.route("/hello/{name}")
@@ -723,8 +723,20 @@ await server.start("127.0.0.1", 8765)
 from mini_aiohttp import HTTP2Client, HTTP2Server
 ```
 
-- `HTTP2Client(*, ssl_context=None, timeout=15.0)`: `get(url, *, headers=None)` and `request(method, url, *, headers=None, data=b"")`. Both return `(status, headers, body)`. Only `https://` URLs are supported. ALPN must negotiate `h2`. Each request uses its own connection.
-- `HTTP2Server(handler, *, ssl_context, max_body_size=10 * 1024 * 1024)`: `start(host="127.0.0.1", port=8443)` and `close()`. The handler is `async def handler(method, path, headers, body)` and returns `(status, headers, body)`. The adapter sets `h2` as the ALPN protocol on `ssl_context`, so use a context dedicated to this server.
+- `HTTP2Client(*, ssl_context=None, timeout=15.0)`: `get(url, *, headers=None)` and `request(method, url, *, headers=None, data=b"")`. Both return `(status, headers, body)`. Only `https://` URLs are supported, and ALPN must negotiate `h2`. Requests to the same origin share one pooled connection and run as parallel streams. The client waits for the server's `MAX_CONCURRENT_STREAMS` before opening a stream. `close()` closes the pooled connections.
+- `HTTP2Server(handler, *, ssl_context, max_body_size=10 * 1024 * 1024, max_concurrent_streams=100, max_header_list_size=64 * 1024, idle_timeout=30.0)`: `start(host="127.0.0.1", port=8443)`, the `port` property, and `close(*, grace=5.0)`. The handler is `async def handler(method, path, headers, body)` and returns `(status, headers, body)`. Each stream runs in its own task, so a slow request does not hold up the others. The adapter sets `h2` as the ALPN protocol on `ssl_context`, so use a context dedicated to this server.
+
+Server limits (each violation affects only what it names):
+
+| Situation | Result |
+|---|---|
+| More than `max_concurrent_streams` open at once | The connection gets GOAWAY (PROTOCOL_ERROR) and is closed. |
+| Request headers larger than `max_header_list_size` | That stream is reset (ENHANCE_YOUR_CALM). |
+| Body larger than `max_body_size` | That stream is reset. Other streams continue. |
+| No bytes received for `idle_timeout` seconds | The connection gets GOAWAY (NO_ERROR) and is closed. |
+| Requests that arrive during `close()` | The stream is refused (REFUSED_STREAM). |
+
+`close(grace=...)` stops accepting new connections, lets in-flight streams finish for up to `grace` seconds, then sends GOAWAY(NO_ERROR) and closes the connections.
 
 ```python
 import ssl
@@ -747,8 +759,19 @@ from mini_aiohttp import HTTP3Client, HTTP3Server
 
 HTTP/3 runs over QUIC on UDP and requires TLS 1.3. It is not a fallback for TCP connections, and the endpoint must support HTTP/3.
 
-- `HTTP3Client(*, verify=True, timeout=15.0)`: `get(url, *, headers=None)` and `request(method, url, *, headers=None, data=b"")`. Both return `(status, headers, body)`. `verify=False` disables certificate verification.
-- `HTTP3Server(handler, *, certificate, private_key, max_body_size=10 * 1024 * 1024)`: `start(host="0.0.0.0", port=443)` and `close()`. `certificate` and `private_key` are file paths. The handler signature is the same as HTTP/2.
+- `HTTP3Client(*, verify=True, timeout=15.0, max_concurrent_streams=100)`: `get(url, *, headers=None)` and `request(method, url, *, headers=None, data=b"")`. Both return `(status, headers, body)`. `verify=False` disables certificate verification. Requests to the same origin share one pooled QUIC connection. `max_concurrent_streams` caps parallel requests on it, and must not exceed the server's limit. If a connection drops, its pending requests fail with `ConnectionError`, and the next request opens a new connection. `close()` closes the pooled connections.
+- `HTTP3Server(handler, *, certificate, private_key, max_body_size=10 * 1024 * 1024, max_concurrent_streams=100, max_header_list_size=64 * 1024, idle_timeout=30.0)`: `start(host="0.0.0.0", port=443)`, the `port` property, and `close(*, grace=5.0)`. `certificate` and `private_key` are file paths. The handler signature is the same as HTTP/2.
+
+Server limits:
+
+| Situation | Result |
+|---|---|
+| More than `max_concurrent_streams` requests open on one connection | The new stream is reset (H3_EXCESSIVE_LOAD). |
+| Request headers larger than `max_header_list_size` | The stream is reset (H3_EXCESSIVE_LOAD). |
+| Body larger than `max_body_size` | 413. |
+| No traffic for `idle_timeout` seconds | The QUIC connection is closed. |
+
+`close(grace=...)` refuses new requests with H3_REQUEST_REJECTED, which tells the client it is safe to retry elsewhere. In-flight responses finish for up to `grace` seconds, then the QUIC connections close with NO_ERROR.
 
 ### Security helpers
 
@@ -934,8 +957,8 @@ python -m twine check dist/*
 | Sessions | `SessionMiddleware`: signed cookies, HMAC-SHA256 |
 | Forms and templates | `parse_urlencoded`, `Template`, `TemplateLoader` |
 | SOCKS5 | Yes, HTTP targets |
-| HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`) |
-| HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`) |
+| HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`): pooled client, parallel streams, limits, graceful close |
+| HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`): pooled client, parallel streams, limits, graceful close |
 | WebSockets | RFC 6455 client; server on the HTTP port (`Server.websocket`) or standalone (`WebSocketServer`) |
 | ASGI 3 | `ASGIApp` for HTTP and lifespan (no WebSocket) |
 | Prebuilt wheels | Linux x86_64, macOS x86_64 and arm64, Windows x86_64 (CPython 3.11–3.13) |
@@ -944,8 +967,9 @@ python -m twine check dist/*
 
 ## 🛡️ Protocol Limitations
 
-- HTTP/2 adapter currently uses one request per connection, and requires TLS ALPN negotiation.
+- HTTP/2 adapters require TLS ALPN negotiation. The client keeps one connection per origin. The server enforces its own stream, header and idle limits, which are listed in the HTTP/2 section.
 - HTTP/3 requires QUIC/UDP and TLS 1.3 certificates, plus an HTTP/3-capable endpoint. It cannot be transparently substituted on arbitrary TCP connections.
+- HTTP/3 `max_concurrent_streams` is enforced by the application. aioquic advertises a fixed QUIC stream limit of 128 per connection, so keep the server's limit at or below that.
 - WebSocket endpoints on the HTTP port (`Server.websocket`) bypass middleware, so authentication and Origin checks belong in the handler. The standalone `WebSocketServer` has the same limits.
 - WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
 - WebSocket compression (`permessage-deflate`) is not implemented.
@@ -980,6 +1004,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.8.0**
+**mini-aiohttp v0.9.0**
 
 *Lightweight. Asynchronous. Flexible.*

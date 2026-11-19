@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0
+
+### Added
+- `HTTP2Client` reuses one pooled connection per origin and runs requests as parallel streams. It waits for the server's SETTINGS, so the server's `MAX_CONCURRENT_STREAMS` is respected. New `close()` method closes pooled connections.
+- `HTTP2Server` options: `max_concurrent_streams` (enforced; a peer that exceeds it gets GOAWAY), `max_header_list_size` (oversized requests are refused) and `idle_timeout` (idle connections get GOAWAY).
+- `HTTP2Server.close(grace=...)` finishes in-flight streams before sending GOAWAY. Requests that arrive during shutdown are refused with REFUSED_STREAM.
+- `HTTP3Client` pools one QUIC connection per origin and runs requests in parallel, up to `max_concurrent_streams`. Pending requests fail at once when the connection drops. New `close()` method.
+- `HTTP3Server` options: `max_concurrent_streams`, `max_header_list_size` (oversized requests are reset with H3_EXCESSIVE_LOAD) and `idle_timeout`. New `port` property.
+- `HTTP3Server.close(grace=...)` refuses new requests with H3_REQUEST_REJECTED, lets in-flight responses finish, then closes the QUIC connections.
+
+### Fixed
+- `HTTP3Client` works on hosts without IPv6. aioquic's `connect()` always opened an IPv6 socket, so IPv4-only hosts failed. The client now opens a socket for the target's address family.
+
+### Notes
+- Load tests against real traffic are not part of this release.
+- The WebSocket connect-timeout test can still leave a pending task, which shows as a "Task was destroyed" warning. This is unchanged from 0.5.5.
+
 ## 0.8.0
 
 ### Added
@@ -7,7 +24,6 @@
 
 ### Notes
 - Middleware does not run for WebSocket connections. Check authentication and the `Origin` header inside the handler.
-- README does not yet document the same-port WebSocket API. The standalone `WebSocketServer` documentation still applies.
 
 ## 0.7.0
 
