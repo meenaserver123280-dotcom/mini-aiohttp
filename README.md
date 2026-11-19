@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.6.1** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v0.7.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.6.1-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-0.7.0-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -45,7 +45,10 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Chunked request-body decoding.
 - Chunked streaming responses.
 - HTTPS support using SSLContext.
-- Static file serving.
+- Static file serving with HTTP `Range` (206/416), `ETag`, `Last-Modified` and conditional GET (`StaticFiles`).
+- Signed-cookie sessions (`SessionMiddleware`).
+- Form body parsing with size limits (`parse_urlencoded`).
+- Minimal template engine with HTML escaping (`Template`, `TemplateLoader`).
 - Path traversal protection.
 - Graceful server shutdown.
 - Connection limits.
@@ -60,6 +63,7 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Token-bucket rate limiting, and a Redis-backed limiter for multiple servers.
 - IP/CIDR policies.
 - Secure cookie helpers.
+- Tamper-evident signed session cookies.
 - JWT bearer authentication middleware (extra).
 - JSON request validation, plain or with pydantic models (extra).
 - Bounded request and response parsing, fuzz-tested with hypothesis.
@@ -108,7 +112,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.6.1
+pip install mini-aiohttp==0.7.0
 ```
 
 Upgrade an existing installation:
@@ -140,7 +144,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.6.1"
+        "version": "0.7.0"
     })
 
 @app.route("/hello/{name}")
@@ -208,6 +212,55 @@ use_uvloop()  # needs the 'speed' extra; returns False if uvloop is missing
 asyncio.run(main())
 ```
 
+### Static files with Range and ETag
+
+```python
+from mini_aiohttp import Server
+from mini_aiohttp.static import StaticFiles
+
+app = Server()
+app.middleware_(StaticFiles("/static", "public"))
+# GET /static/video.mp4 with "Range: bytes=0-1023" returns 206 with Content-Range.
+# GET /static/app.css with "If-None-Match: <etag>" returns 304 with no body.
+```
+
+### Sessions and forms
+
+```python
+import os
+from mini_aiohttp import Response, Server, SessionMiddleware
+from mini_aiohttp.forms import FormError, parse_urlencoded
+
+app = Server()
+app.middleware_(SessionMiddleware(secret=os.environ["SESSION_SECRET"]))  # 32+ bytes
+
+@app.route("/login", method="POST")
+async def login(req):
+    try:
+        fields = parse_urlencoded(req)
+    except FormError as exc:
+        return Response(exc.status, str(exc))
+    req.session["user"] = fields.get("user", [""])[0]
+    return Response(303, b"", {"Location": "/"})
+
+@app.route("/me")
+async def me(req):
+    return Response.json({"user": req.session.get("user")})
+```
+
+### Templates
+
+```python
+from mini_aiohttp import Server, TemplateLoader, html_response
+
+loader = TemplateLoader("templates")  # templates/home.html
+app = Server()
+
+@app.route("/")
+async def home(req):
+    return html_response(loader.render("home.html", title="Hi", user={"name": "Ada"}))
+```
+
 ### Prometheus metrics (optional)
 
 ```python
@@ -271,7 +324,7 @@ Server(*, max_connections=100_000, read_timeout=15.0, max_body_size=10 * 1024 * 
 |---|---|
 | `route(path, method="GET")` | Decorator that registers a handler. Use `{name}` for path parameters, available as `req.params`. Literal routes take priority over parameterized ones. The first registration of the same method and path wins. |
 | `middleware_(fn)` | Registers `async def fn(req, call_next)`. Middleware runs for every request, including 404, 405 and static files. |
-| `static(prefix, directory, *, max_file_size=50 * 1024 * 1024)` | Serves files under `prefix`. Only GET and HEAD are allowed. Paths must stay inside `directory`, so `..` and symlinks cannot escape it. Files are streamed in 64 KiB chunks. Larger files get 413. |
+| `static(prefix, directory, *, max_file_size=50 * 1024 * 1024)` | Serves files under `prefix` with the built-in static handler (GET and HEAD only, no Range). Paths must stay inside `directory`, so `..` and symlinks cannot escape it. Files are streamed in 64 KiB chunks. Larger files get 413. For Range and ETag support, use `StaticFiles` (below). |
 | `start(host="127.0.0.1", port=8080, *, reuse_port=False, ssl=None)` | Starts listening. Pass an `ssl.SSLContext` (server side) to serve HTTPS. Returns the asyncio server. |
 | `serve_forever(host="127.0.0.1", port=8080, **kwargs)` | Starts and runs until cancelled. |
 | `close(*, grace=5.0)` | Stops accepting connections, lets in-flight requests finish for up to `grace` seconds, then closes the rest. Does not raise on slow shutdown. |
@@ -316,9 +369,10 @@ Passed to every handler and middleware.
 | `json()` | Body parsed as JSON. Raises `ValueError` on invalid input. |
 | `query_params()` | Query string as `{name: [values]}`, blanks kept. |
 | `form()` | Parsed `multipart/form-data` body as `{name: [str or UploadedFile, ...]}`. Raises `ValueError` on bad bodies, so catch it and return 400. |
+| `session` | Set by `SessionMiddleware`. A dict-like `Session`. |
 | `user`, `model` | Set by the `jwt_auth` and `validated_json` extras. |
 
-The server does not parse cookies. Read them from `req.headers["cookie"]`.
+The server does not parse cookies. Read them from `req.headers["cookie"]`, or use `SessionMiddleware`.
 
 ### Response
 
@@ -335,6 +389,92 @@ Response(status=200, body=b"", headers=None)
 - `reason`, `is_streaming`: status reason phrase and streaming flag.
 
 On the client side, a `Response` also has `status`, `headers` (lowercase names), `body` (bytes), `set_cookies` (raw `Set-Cookie` values) and these methods for streamed bodies: `iter_chunks()`, `aread()` and `aclose()`. `text()` on a streamed response raises `RuntimeError` until `aread()` has been called. To parse a JSON body on the client, use `json.loads(response.body)`. `Response.json` is a constructor for server responses, not an instance method.
+
+### Static files: `StaticFiles`
+
+```python
+from mini_aiohttp.static import StaticFiles
+
+StaticFiles(prefix, directory, *, max_file_size=50 * 1024 * 1024, cache_control="public, max-age=3600")
+```
+
+Register it as middleware: `app.middleware_(StaticFiles("/static", "public"))`. Requests under the prefix are answered by it. All other requests go to the next middleware and route.
+
+| Feature | Behaviour |
+|---|---|
+| Methods | GET and HEAD. Other methods get 405 with `Allow: GET, HEAD`. |
+| Missing file | 404. Paths that escape `directory`, including encoded `..`, are 404. |
+| Range | One byte range per request: `bytes=a-b`, `bytes=a-`, or suffix `bytes=-n`. Returns 206 with `Content-Range`. An unsatisfiable range returns 416 with `Content-Range: bytes */size`. A malformed or multi-range header is ignored and the full file is sent. |
+| `Accept-Ranges` | `bytes` on every response. |
+| `ETag` | Built from size and modification time. Weak comparison is used. |
+| `Last-Modified` | Set on every response. |
+| Conditional GET | `If-None-Match` (including `*`) and `If-Modified-Since` return 304 with no body. |
+| `If-Range` | When the validator matches, the partial range is kept. When it does not, the full file is sent. |
+| Size limit | Files over `max_file_size` get 413. |
+| Content-Type | Guessed from the file name. Unknown types are `application/octet-stream`. |
+
+Files are read in 64 KiB chunks in a worker thread, so the event loop is not blocked by disk reads.
+
+### Sessions: `SessionMiddleware`
+
+```python
+from mini_aiohttp import SessionMiddleware, Session
+
+SessionMiddleware(
+    secret, *, cookie_name="session", max_age=3600, path="/",
+    secure=True, httponly=True, samesite="Lax",
+)
+```
+
+- `secret` must be at least 32 bytes. Keep it in an environment variable or secret store.
+- The session data is stored in the cookie itself, as base64url JSON signed with HMAC-SHA256. The server keeps no session state, so sessions work across multiple processes that share the secret.
+- The signature prevents tampering. It does not hide the data. Do not store secrets in a session.
+- A missing, forged, expired or malformed cookie gives an empty session. Expiry is checked on every request.
+- `req.session` supports `[]`, `get`, `pop`, `in`, `del`, and `clear()`. Changes set a new cookie. An unchanged session sends no cookie.
+- Clearing the session, or popping every key, expires the cookie (`Max-Age=0`).
+- Data must fit in about 3.8 KiB. A larger session raises `ValueError`.
+- Set `secure=False` only for local development over plain HTTP. Logout is `req.session.clear()`. Stolen cookies stay valid until they expire, so keep `max_age` short for sensitive apps.
+
+### Forms: `parse_urlencoded`
+
+```python
+from mini_aiohttp.forms import parse_urlencoded, FormError
+
+parse_urlencoded(req, *, max_bytes=64 * 1024, max_fields=100) -> dict[str, list[str]]
+```
+
+Parses `application/x-www-form-urlencoded` bodies, the format of plain HTML forms. Blank values are kept, and repeated names give several values. The `Content-Type` parameters are ignored, and the media type is matched case-insensitively.
+
+`FormError` (a `ValueError`) has a `status` attribute to return:
+
+| Status | Cause |
+|---|---|
+| 415 | Content-Type is not `application/x-www-form-urlencoded` (or is missing). |
+| 413 | Body is larger than `max_bytes`. |
+| 400 | Too many fields, or the body is not valid ASCII form encoding. |
+
+For `multipart/form-data` uploads, use `req.form()` instead.
+
+### Templates: `Template`, `TemplateLoader`, `html_response`
+
+```python
+from mini_aiohttp import Template, TemplateLoader, TemplateError, html_response
+```
+
+Syntax:
+
+| Syntax | Meaning |
+|---|---|
+| `{{ name }}` | Value, HTML-escaped (`&`, `<`, `>`, `"`, `'`). |
+| `{{! name }}` | Value inserted raw. Use only for trusted markup. |
+| `{{ user.name }}` | Dotted lookup. Works on dicts and on object attributes. |
+
+Anything that does not match these forms is kept as literal text. There are no loops or conditions. Keep logic in Python and pass ready values to the template.
+
+- `Template(source)`: compile a string once. `render(**context)` returns a string.
+- `TemplateLoader(directory)`: loads files from a directory. Names cannot leave the directory. Files are cached and reloaded when their modification time changes. `get(name)` returns a `Template`, and `render(name, **context)` renders directly.
+- A missing template, or a variable missing from the context, raises `TemplateError`. Typos fail loudly.
+- `html_response(body, status=200)`: a UTF-8 HTML `Response`.
 
 ### ASGI adapter
 
@@ -609,7 +749,9 @@ Each extra imports its package only when it is used.
 
 - `ClientError`: client-side failures, including malformed responses, oversized bodies, too many redirects and unsupported encodings.
 - `WebSocketError`: WebSocket handshake, frame and connection errors.
-- `ValueError`: invalid arguments, such as an unsupported URL scheme or an invalid header.
+- `FormError`: a form body that cannot be parsed. It has a `status` for the response.
+- `TemplateError`: a missing template, or a variable missing from the template context.
+- `ValueError`: invalid arguments, such as an unsupported URL scheme, an invalid header, or a session secret shorter than 32 bytes.
 - The server never lets a handler exception reach the client. It returns 500 and logs the traceback.
 
 ---
@@ -725,6 +867,9 @@ python -m twine check dist/*
 | Streaming Responses | Yes |
 | Content-Encoding | gzip, deflate (core); br (`brotli` extra) |
 | Response compression | gzip middleware (core) |
+| Static files | `StaticFiles`: Range (single range), ETag, Last-Modified, conditional GET |
+| Sessions | `SessionMiddleware`: signed cookies, HMAC-SHA256 |
+| Forms and templates | `parse_urlencoded`, `Template`, `TemplateLoader` |
 | SOCKS5 | Yes, HTTP targets |
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`) |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`) |
@@ -741,7 +886,10 @@ python -m twine check dist/*
 - WebSocket server is not mounted as a route on the HTTP/1.1 `Server` class. WebSocket support is standalone.
 - WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
 - WebSocket compression (`permessage-deflate`) is not implemented.
-- Static files do not support `Range` requests or `ETag` yet.
+- `StaticFiles` serves one byte range per request. Multi-range requests are answered with the full file. Range and ETag are not available through the older `Server.static()` handler.
+- `StaticFiles` ETags are based on size and modification time, not content hashes.
+- Sessions are signed, not encrypted. The data is readable by the client, and a stolen cookie is valid until it expires.
+- The template engine has no loops, conditions or template inheritance. Use Python for logic.
 - No automatic multi-process worker manager is included. Use your ASGI server's worker options (for example `uvicorn --workers`) with `ASGIApp`.
 - WebSockets are not available through `ASGIApp`. Run `WebSocketServer` on its own port.
 
@@ -769,6 +917,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.6.1**
+**mini-aiohttp v0.7.0**
 
 *Lightweight. Asynchronous. Flexible.*
