@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0
+
+### Added
+- `StaticFiles` middleware (`mini_aiohttp.static`): single byte ranges with 206 and 416 responses, `Accept-Ranges`, `ETag` and `Last-Modified`, `If-None-Match`, `If-Modified-Since`, `If-Range`, and 405 for methods other than GET and HEAD. Paths cannot leave the served directory.
+- `SessionMiddleware` and `Session` (`mini_aiohttp.sessions`): signed-cookie sessions (HMAC-SHA256) with expiry. Tampered, forged, expired or wrongly signed cookies are ignored. Cookies default to `Secure`, `HttpOnly` and `SameSite=Lax`. Clearing a session expires the cookie. Session data must fit in a cookie of about 3.8 KiB.
+- `parse_urlencoded` and `FormError` (`mini_aiohttp.forms`): parse `application/x-www-form-urlencoded` bodies with size and field-count limits. Errors carry the status to return: 415, 413 or 400.
+- `Template`, `TemplateLoader`, `TemplateError` and `html_response` (`mini_aiohttp.templates`): a minimal template engine with HTML escaping by default, a raw `{{! }}` form, dotted lookups, a missing-variable error, and a cached loader with path-traversal protection.
+- Reason phrases for 206 and 416 in `Response`.
+- All of the above are exported from the top-level package.
+
+### Changed
+- Version bumped to 0.7.0. The README documents the new modules, and the limitation that static files had no `Range` or `ETag` support is removed.
+
+### Notes
+- HTTP/2 and HTTP/3 production hardening, WebSocket on the same HTTP port, and load tests against real traffic are not part of this release.
+
 ## 0.6.1
 
 ### Added
