@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.7.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v0.8.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.7.0-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-0.8.0-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -39,6 +39,7 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Asynchronous HTTP server with optional Rust-accelerated request parsing and response serialization (pure-Python fallbacks supported).
 - Custom routing and path parameters.
 - Middleware support.
+- WebSocket endpoints on the HTTP port (`Server.websocket`).
 - ASGI 3 adapter (`ASGIApp`) for uvicorn, hypercorn and other ASGI servers.
 - Gzip response compression middleware (`gzip_middleware`).
 - HTTP/1.1 persistent connections.
@@ -112,7 +113,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==0.7.0
+pip install mini-aiohttp==0.8.0
 ```
 
 Upgrade an existing installation:
@@ -144,7 +145,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "0.7.0"
+        "version": "0.8.0"
     })
 
 @app.route("/hello/{name}")
@@ -163,6 +164,25 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### WebSocket on the same port
+
+```python
+from mini_aiohttp import Server
+
+app = Server()
+
+@app.websocket("/ws/{room}")
+async def chat(ws, req):
+    await ws.send(f"joined {req.params['room']}")
+    while True:
+        msg = await ws.recv()
+        if msg is None:
+            break
+        await ws.send(msg)
+```
+
+Clients connect to `ws://127.0.0.1:8080/ws/lobby`. The HTTP routes and the WebSocket route share one port.
 
 ### Run under uvicorn (ASGI)
 
@@ -323,7 +343,8 @@ Server(*, max_connections=100_000, read_timeout=15.0, max_body_size=10 * 1024 * 
 | Method or property | Purpose |
 |---|---|
 | `route(path, method="GET")` | Decorator that registers a handler. Use `{name}` for path parameters, available as `req.params`. Literal routes take priority over parameterized ones. The first registration of the same method and path wins. |
-| `middleware_(fn)` | Registers `async def fn(req, call_next)`. Middleware runs for every request, including 404, 405 and static files. |
+| `websocket(path)` | Decorator that registers a WebSocket endpoint on the HTTP port. The handler is `async def handler(ws, req)`. See the WebSocket endpoints section below. |
+| `middleware_(fn)` | Registers `async def fn(req, call_next)`. Middleware runs for every HTTP request, including 404, 405 and static files. It does not run for WebSocket connections. |
 | `static(prefix, directory, *, max_file_size=50 * 1024 * 1024)` | Serves files under `prefix` with the built-in static handler (GET and HEAD only, no Range). Paths must stay inside `directory`, so `..` and symlinks cannot escape it. Files are streamed in 64 KiB chunks. Larger files get 413. For Range and ETag support, use `StaticFiles` (below). |
 | `start(host="127.0.0.1", port=8080, *, reuse_port=False, ssl=None)` | Starts listening. Pass an `ssl.SSLContext` (server side) to serve HTTPS. Returns the asyncio server. |
 | `serve_forever(host="127.0.0.1", port=8080, **kwargs)` | Starts and runs until cancelled. |
@@ -496,7 +517,7 @@ ASGIApp(server, *, on_startup=None, on_shutdown=None)
 | Framing headers | Your `Content-Length` and `Transfer-Encoding` headers are ignored, because the ASGI server sets framing. |
 | Client disconnect | No response is sent. |
 | Lifespan | `on_startup` and `on_shutdown` run once each. If one raises, the server receives a `lifespan.*.failed` message. |
-| WebSocket | Refused with a close before accept. Use `WebSocketServer` on its own port. |
+| WebSocket | Refused with a close before accept. Use `Server.websocket` on the built-in server, or `WebSocketServer` on its own port. |
 | Limits | Request-line length, header count, idle timeout and connection cap are enforced by the ASGI server, not by `Server`. `max_body_size` still applies. |
 | Statistics | Requests served through `ASGIApp` are counted in `server.stats`. |
 
@@ -603,11 +624,54 @@ from mini_aiohttp import CookieJar
 
 `CookieJar` stores `Set-Cookie` values and returns the matching `Cookie` header. It supports the Domain, Path, Secure and Max-Age attributes. `Expires` is ignored. A Domain attribute that does not match the response host is rejected. Host-only cookies are the default. Expired cookies are removed. `update(url, set_cookie_values)` and `header_for(url)` are the main methods. `ClientSession` creates one automatically (`cookies=True`).
 
-### WebSocket
+### WebSocket endpoints on the HTTP port
+
+```python
+app = Server()
+
+@app.websocket("/ws/{room}")
+async def chat(ws, req):
+    ...
+```
+
+`Server.websocket(path)` registers a WebSocket endpoint that is served on the same port as the HTTP routes. A client sends a GET request with `Upgrade: websocket`. If the path matches a registered endpoint, the server completes the RFC 6455 handshake and calls your handler with the connection and the request.
+
+- `ws` is a `WebSocket`. Use `send(data)`, `recv()` and `close(code, reason)` as described in the WebSocket section below.
+- `req.params` holds the path parameters, such as `room` in the example above.
+- `req.headers` holds the handshake headers, including `origin` and `cookie`.
+
+| Behaviour | Detail |
+|---|---|
+| Matching | A GET with `Upgrade: websocket` on a registered path. Path parameters use the same `{name}` syntax as `route`. |
+| Other paths | An upgrade request to an unregistered path is handled as normal HTTP, so it gets 404 or 405. |
+| Bad handshake | 400, with the reason in the body. |
+| Middleware | Not run for WebSocket connections. |
+| Origin | Not checked. Check `req.headers["origin"]` in the handler, especially when you authenticate with cookies. |
+| Normal close | When the handler returns, the server sends close code 1000. |
+| Handler error | An unhandled exception is logged and the connection is closed with code 1011. |
+| Limits | Frames and messages are limited to 16 MiB. Each WebSocket connection counts toward `max_connections`. |
+| Shutdown | `close()` waits up to `grace` seconds for open connections, then closes them. |
+
+Because middleware does not run, put authentication inside the handler:
+
+```python
+ALLOWED_ORIGINS = {"https://example.com"}
+
+@app.websocket("/live")
+async def live(ws, req):
+    if req.headers.get("origin") not in ALLOWED_ORIGINS:
+        await ws.close(1008, "origin not allowed")
+        return
+    # ... your checks, then the message loop ...
+```
+
+### WebSocket (standalone server and client)
 
 ```python
 from mini_aiohttp import WebSocket, WebSocketServer, WebSocketError
 ```
+
+Use the standalone server when the WebSocket endpoints need their own port, or when the handler needs the full HTTP headers. It is independent of `Server`.
 
 **Client:**
 
@@ -628,7 +692,7 @@ reply = await ws.recv()
 await ws.close(1000, "bye")
 ```
 
-**Server:**
+**Standalone server:**
 
 ```python
 WebSocketServer(handler, *, ssl=None, max_connections=1000)
@@ -636,7 +700,6 @@ WebSocketServer(handler, *, ssl=None, max_connections=1000)
 
 - `handler` is `async def handler(websocket, path)`. `path` is the request target, including any query string.
 - `start(host="127.0.0.1", port=8765)` and `close()`.
-- The server is standalone. It is not mounted on the HTTP/1.1 `Server` class.
 - Frames and messages are limited to 16 MiB. The handshake must complete within 10 seconds.
 - The `Origin` header is not checked, and the handler receives only the path, not the headers.
 
@@ -873,7 +936,7 @@ python -m twine check dist/*
 | SOCKS5 | Yes, HTTP targets |
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`) |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`) |
-| WebSockets | Standalone RFC 6455 client/server |
+| WebSockets | RFC 6455 client; server on the HTTP port (`Server.websocket`) or standalone (`WebSocketServer`) |
 | ASGI 3 | `ASGIApp` for HTTP and lifespan (no WebSocket) |
 | Prebuilt wheels | Linux x86_64, macOS x86_64 and arm64, Windows x86_64 (CPython 3.11–3.13) |
 
@@ -883,7 +946,7 @@ python -m twine check dist/*
 
 - HTTP/2 adapter currently uses one request per connection, and requires TLS ALPN negotiation.
 - HTTP/3 requires QUIC/UDP and TLS 1.3 certificates, plus an HTTP/3-capable endpoint. It cannot be transparently substituted on arbitrary TCP connections.
-- WebSocket server is not mounted as a route on the HTTP/1.1 `Server` class. WebSocket support is standalone.
+- WebSocket endpoints on the HTTP port (`Server.websocket`) bypass middleware, so authentication and Origin checks belong in the handler. The standalone `WebSocketServer` has the same limits.
 - WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
 - WebSocket compression (`permessage-deflate`) is not implemented.
 - `StaticFiles` serves one byte range per request. Multi-range requests are answered with the full file. Range and ETag are not available through the older `Server.static()` handler.
@@ -891,7 +954,7 @@ python -m twine check dist/*
 - Sessions are signed, not encrypted. The data is readable by the client, and a stolen cookie is valid until it expires.
 - The template engine has no loops, conditions or template inheritance. Use Python for logic.
 - No automatic multi-process worker manager is included. Use your ASGI server's worker options (for example `uvicorn --workers`) with `ASGIApp`.
-- WebSockets are not available through `ASGIApp`. Run `WebSocketServer` on its own port.
+- WebSockets are not available through `ASGIApp`. Use `Server.websocket` on the built-in server, or run `WebSocketServer` on its own port.
 
 Additional notes:
 
@@ -917,6 +980,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v0.7.0**
+**mini-aiohttp v0.8.0**
 
 *Lightweight. Asynchronous. Flexible.*
