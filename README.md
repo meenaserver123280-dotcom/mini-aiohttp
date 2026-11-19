@@ -1,12 +1,12 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v0.5.6** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio.
+**mini-aiohttp v0.5.6** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3 and WebSocket support.
 
-Designed for simplicity, performance, flexibility and security. The core keeps pure-Python fallbacks. When built with Rust available, an optional PyO3 extension accelerates HTTP request-head parsing and buffered response serialization.
+Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. When a Rust toolchain is available at install time, an optional PyO3 extension accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-0.5.6-green)](https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.6)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-0.5.6-green)](https://pypi.org/project/mini-aiohttp/)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
 
@@ -71,16 +71,15 @@ Designed for simplicity, performance, flexibility and security. The core keeps p
 
 ## 📦 Installation
 
-For native acceleration, install Rust (rustup) before installing the package so the optional extension can be compiled. Without Rust, the package uses its pure-Python parser and response serializer.
-
-
-Core (no dependencies):
+Core (no required dependencies):
 
 ```bash
 pip install mini-aiohttp
 ```
 
 Requires Python 3.11 or newer.
+
+When a Rust toolchain is present, installing from source also builds the optional native extension (`mini_aiohttp._native`). Without Rust, the package uses its pure-Python parser and response serializer. Nothing in the API changes between the two.
 
 Optional extras:
 
@@ -237,6 +236,319 @@ app.middleware_(limiter.middleware())
 
 ---
 
+## 📖 API Reference
+
+Everything below is exported from the top-level package (`from mini_aiohttp import ...`) unless a module path is given. `mini_aiohttp.__version__` holds the package version string.
+
+### Server
+
+```python
+Server(*, max_connections=100_000, read_timeout=15.0, max_body_size=10 * 1024 * 1024, backlog=4096)
+```
+
+| Method or property | Purpose |
+|---|---|
+| `route(path, method="GET")` | Decorator that registers a handler. Use `{name}` for path parameters, available as `req.params`. Literal routes take priority over parameterized ones. The first registration of the same method and path wins. |
+| `middleware_(fn)` | Registers `async def fn(req, call_next)`. Middleware runs for every request, including 404, 405 and static files. |
+| `static(prefix, directory, *, max_file_size=50 * 1024 * 1024)` | Serves files under `prefix`. Only GET and HEAD are allowed. Paths must stay inside `directory`, so `..` and symlinks cannot escape it. Files are streamed in 64 KiB chunks. Larger files get 413. |
+| `start(host="127.0.0.1", port=8080, *, reuse_port=False, ssl=None)` | Starts listening. Pass an `ssl.SSLContext` (server side) to serve HTTPS. Returns the asyncio server. |
+| `serve_forever(host="127.0.0.1", port=8080, **kwargs)` | Starts and runs until cancelled. |
+| `close(*, grace=5.0)` | Stops accepting connections, lets in-flight requests finish for up to `grace` seconds, then closes the rest. Does not raise on slow shutdown. |
+| `port` | Bound port (useful with `port=0`). |
+| `stats` | Snapshot of counters, see Server Statistics below. |
+
+Handlers may return a `Response`, or a `str` or `bytes` value, which is sent as a 200 response.
+
+HEAD requests are answered by the matching GET route (the body is dropped and `Content-Length` reports the GET body length). Static files also answer HEAD.
+
+**Server responses and limits:**
+
+| Situation | Result |
+|---|---|
+| No route for the path | 404 |
+| Path exists, method does not | 405 |
+| Handler raises an exception | 500 (logged with traceback) |
+| Request line or header line longer than 8 KiB | 431 |
+| Request head larger than 256 KiB, or more than 100 headers | 431 |
+| Body larger than `max_body_size` | 413 |
+| Duplicate `Host`, `Content-Length` or `Transfer-Encoding` header | 400 |
+| `Content-Length` and `Transfer-Encoding` together | 400 |
+| Transfer-Encoding other than exactly `chunked`, or non-HTTP/1.1 chunked body | 501 |
+| HTTP version other than 1.0 or 1.1 | 505 |
+| More than `max_connections` open, or server draining | 503 |
+| Idle or slow client longer than `read_timeout` | Connection closed |
+
+HTTP/1.1 connections are kept alive unless the client sends `Connection: close`. HTTP/1.0 connections are kept alive only with `Connection: keep-alive`. `Expect: 100-continue` is answered.
+
+### Request
+
+Passed to every handler and middleware.
+
+| Attribute or method | Description |
+|---|---|
+| `method`, `path`, `query`, `version` | Request line parts. `query` is the raw query string. |
+| `headers` | Dict with lowercase header names. |
+| `body` | Request body as bytes (decoded from chunked encoding if needed). |
+| `params` | Path parameters from `{name}` segments. |
+| `client` | Peer IP address as a string, or `None`. |
+| `text()` | Body decoded as UTF-8. |
+| `json()` | Body parsed as JSON. Raises `ValueError` on invalid input. |
+| `query_params()` | Query string as `{name: [values]}`, blanks kept. |
+| `form()` | Parsed `multipart/form-data` body as `{name: [str or UploadedFile, ...]}`. Raises `ValueError` on bad bodies, so catch it and return 400. |
+| `user`, `model` | Set by the `jwt_auth` and `validated_json` extras. |
+
+The server does not parse cookies. Read them from `req.headers["cookie"]`.
+
+### Response
+
+```python
+Response(status=200, body=b"", headers=None)
+```
+
+- `body` may be `str` (encoded as UTF-8) or bytes. `headers` names are stored lowercase.
+- When not set, `content-type` defaults to `text/plain; charset=utf-8`. `content-length` and `connection` are added automatically.
+- `Response.json(data, status=200)`: JSON body with `application/json; charset=utf-8`.
+- `Response.stream(chunks, status=200, headers=None)`: sends an async iterable of bytes or str as a chunked response, without buffering it all in memory. Streamed bodies are closed if the connection drops.
+- `add_set_cookie(raw)`: queues a `Set-Cookie` header. Use the `set_cookie` helper for safe defaults.
+- `text(encoding="utf-8")`: body as text, for buffered responses.
+- `reason`, `is_streaming`: status reason phrase and streaming flag.
+
+On the client side, a `Response` also has `status`, `headers` (lowercase names), `body` (bytes), `set_cookies` (raw `Set-Cookie` values) and these methods for streamed bodies: `iter_chunks()`, `aread()` and `aclose()`. `text()` on a streamed response raises `RuntimeError` until `aread()` has been called. To parse a JSON body on the client, use `json.loads(response.body)`. `Response.json` is a constructor for server responses, not an instance method.
+
+### ClientSession
+
+```python
+ClientSession(
+    *, timeout=10.0, connect_timeout=5.0, max_per_host=1000, max_idle_per_host=100,
+    max_response_size=1 GiB, max_redirects=10, retries=0,
+    retry_statuses=(429, 502, 503, 504), backoff=0.5, cookies=True,
+    ssl_context=None, proxy=None, dns_cache_ttl=300.0,
+    on_request=(), on_response=(), user_agent="mini-aiohttp",
+)
+```
+
+Use it as an async context manager, or call `close()` yourself.
+
+| Method | Description |
+|---|---|
+| `get(url, **kwargs)` | Shortcut for `request("GET", url, ...)`. |
+| `post(url, **kwargs)` | Shortcut for `request("POST", url, ...)`. |
+| `request(method, url, *, headers=None, data=None, json=None, form=None, files=None, timeout=None, stream=False, allow_redirects=True)` | Sends one request and returns a `Response`. |
+| `close()` | Closes pooled connections. |
+
+**`request` arguments:**
+- `data`: `str` or bytes body, or an async iterable of chunks. An async iterable is sent with `Transfer-Encoding: chunked`.
+- `json`: any JSON-serializable value. Sets `Content-Type: application/json` unless you set one.
+- `form`: dict of fields, sent as `multipart/form-data`.
+- `files`: dict mapping a field name to `(filename, bytes, content_type)`, sent with `form`.
+- `json` cannot be combined with `form` or `files`. A streaming `data` body cannot be combined with `json`, `form` or `files`.
+- `timeout`: overrides the session timeout for this request. It covers sending the request and reading the response headers, and for non-streamed responses the whole body.
+- `stream=True`: reads the body lazily with `iter_chunks()`, `aread()` or `aclose()`.
+- `allow_redirects=False`: returns the 3xx response instead of following it.
+
+**Defaults and behaviour:**
+- Default headers: `Host`, `User-Agent`, `Accept: */*`, and `Accept-Encoding: gzip, deflate` (plus `br` when the brotli extra is installed). A caller header with the same name, in any case, replaces the default.
+- You cannot set `Content-Length` or `Transfer-Encoding` yourself. The client raises `ValueError`.
+- Retries (`retries`) apply only to GET, HEAD, PUT, DELETE, OPTIONS and TRACE, and never to streaming bodies. POST and PATCH are never retried. Backoff is exponential, capped at 10 seconds. A numeric `Retry-After` is honoured up to 60 seconds.
+- Redirects (301, 302, 303, 307, 308) are followed up to `max_redirects`. 303 becomes GET. 301 and 302 become GET when sent as POST. A streaming body cannot be replayed for 307 or 308. `Authorization` and `Proxy-Authorization` are removed when the redirect goes to another origin. Only http and https targets are followed.
+- Response bodies are decoded for `gzip`, `deflate` and `br`. After decoding, `content-encoding` and `content-length` are removed from `headers`.
+- Bodies larger than `max_response_size` raise `ClientError`. Pass `None` to disable the limit.
+- Response headers: more than 200 headers, or a line longer than 64 KiB, raise `ClientError`.
+- Cookies are stored in `session.cookie_jar` (`None` when `cookies=False`). A caller-supplied `Cookie` header turns off automatic cookies for that request.
+- `on_request` hooks are called as `hook(method, url, headers)`, and may be async. `on_response` hooks are called as `hook(response)`, and may be async.
+- Connection pooling is per host, port and scheme. The DNS cache uses `dns_cache_ttl` seconds (0 disables it).
+
+### AutoClientSession
+
+```python
+AutoClientSession(*, timeout=10.0, ssl_context=None, **client_options)
+```
+
+A session for mixed HTTP/1.1, HTTP/2 and HTTP/3 traffic.
+- For https URLs, the first request uses HTTP/2 when ALPN negotiates it. Otherwise it uses HTTP/1.1.
+- Responses with an `Alt-Svc: h3=...` header switch later requests to that origin over HTTP/3. A failed HTTP/3 request falls back to the other protocols.
+- HTTP/2 is used only when `ssl_context` is not given. With a custom context, requests use HTTP/1.1, and HTTP/3 if Alt-Svc advertises it.
+- Methods: `request(method, url, *, headers=None, data=b"")`, `get(url, **kwargs)`, `post(url, **kwargs)`, `close()`. It supports async context management. It always returns a buffered `Response`, so it has no `stream` option.
+- Other keyword arguments go to `ClientSession` for the HTTP/1.1 path.
+
+### Batch requests
+
+```python
+from mini_aiohttp import fetch_all, gather_requests
+```
+
+- `fetch_all(requests, *, concurrency=100, timeout=10.0, return_exceptions=True)`: opens a session, runs all requests, and closes it.
+- `gather_requests(session, requests, *, concurrency=100, return_exceptions=True)`: runs requests on an existing session.
+
+Each item in `requests` can be a URL string (GET), a `(method, url)` or `(method, url, kwargs)` tuple, or a dict such as `{"method": "POST", "url": ..., "json": ...}`. Results come back in input order. By default a failed request is returned as its exception object, and it does not cancel the others. `concurrency` must be an integer of at least 1.
+
+```python
+results = await fetch_all([
+    "https://example.com/a",
+    ("POST", "https://example.com/b", {"json": {"x": 1}}),
+    {"method": "GET", "url": "https://example.com/c"},
+])
+```
+
+### Cookies
+
+```python
+from mini_aiohttp import CookieJar
+```
+
+`CookieJar` stores `Set-Cookie` values and returns the matching `Cookie` header. It supports the Domain, Path, Secure and Max-Age attributes. `Expires` is ignored. A Domain attribute that does not match the response host is rejected. Host-only cookies are the default. Expired cookies are removed. `update(url, set_cookie_values)` and `header_for(url)` are the main methods. `ClientSession` creates one automatically (`cookies=True`).
+
+### WebSocket
+
+```python
+from mini_aiohttp import WebSocket, WebSocketServer, WebSocketError
+```
+
+**Client:**
+
+```python
+WebSocket.connect(url, *, headers=None, ssl_context=None, timeout=10.0)  # ws:// or wss://
+```
+
+- `send(data)`: `str` is sent as a text message, bytes-like as a binary message.
+- `recv()`: returns a `str` for text, `bytes` for binary, or `None` after a close frame. Pings are answered automatically.
+- `close(code=1000, reason="")`: sends a close frame. `reason` is at most 123 UTF-8 bytes.
+- `closed`: `True` after the connection has closed.
+- `headers` cannot override handshake headers (`Host`, `Upgrade`, `Connection`, `Sec-WebSocket-Key`, `Sec-WebSocket-Version`).
+
+```python
+ws = await WebSocket.connect("wss://example.com/chat")
+await ws.send("hello")
+reply = await ws.recv()
+await ws.close(1000, "bye")
+```
+
+**Server:**
+
+```python
+WebSocketServer(handler, *, ssl=None, max_connections=1000)
+```
+
+- `handler` is `async def handler(websocket, path)`. `path` is the request target, including any query string.
+- `start(host="127.0.0.1", port=8765)` and `close()`.
+- The server is standalone. It is not mounted on the HTTP/1.1 `Server` class.
+- Frames and messages are limited to 16 MiB. The handshake must complete within 10 seconds.
+- The `Origin` header is not checked, and the handler receives only the path, not the headers.
+
+```python
+async def handler(ws, path):
+    while True:
+        msg = await ws.recv()
+        if msg is None:
+            break
+        await ws.send(msg)
+
+server = WebSocketServer(handler)
+await server.start("127.0.0.1", 8765)
+```
+
+`WebSocketError` is raised for invalid handshakes, frames, or use of a closed connection.
+
+### HTTP/2 adapters (extra: `http2`)
+
+```python
+from mini_aiohttp import HTTP2Client, HTTP2Server
+```
+
+- `HTTP2Client(*, ssl_context=None, timeout=15.0)`: `get(url, *, headers=None)` and `request(method, url, *, headers=None, data=b"")`. Both return `(status, headers, body)`. Only `https://` URLs are supported. ALPN must negotiate `h2`. Each request uses its own connection.
+- `HTTP2Server(handler, *, ssl_context, max_body_size=10 * 1024 * 1024)`: `start(host="127.0.0.1", port=8443)` and `close()`. The handler is `async def handler(method, path, headers, body)` and returns `(status, headers, body)`. The adapter sets `h2` as the ALPN protocol on `ssl_context`, so use a context dedicated to this server.
+
+```python
+import ssl
+
+ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+ctx.load_cert_chain("cert.pem", "key.pem")
+
+async def handler(method, path, headers, body):
+    return 200, {"content-type": "text/plain"}, b"hello over h2"
+
+server = HTTP2Server(handler, ssl_context=ctx)
+await server.start("127.0.0.1", 8443)
+```
+
+### HTTP/3 adapters (extra: `http3`)
+
+```python
+from mini_aiohttp import HTTP3Client, HTTP3Server
+```
+
+HTTP/3 runs over QUIC on UDP and requires TLS 1.3. It is not a fallback for TCP connections, and the endpoint must support HTTP/3.
+
+- `HTTP3Client(*, verify=True, timeout=15.0)`: `get(url, *, headers=None)` and `request(method, url, *, headers=None, data=b"")`. Both return `(status, headers, body)`. `verify=False` disables certificate verification.
+- `HTTP3Server(handler, *, certificate, private_key, max_body_size=10 * 1024 * 1024)`: `start(host="0.0.0.0", port=443)` and `close()`. `certificate` and `private_key` are file paths. The handler signature is the same as HTTP/2.
+
+### Security helpers
+
+```python
+from mini_aiohttp import cors, security_headers, RateLimiter, ip_policy, set_cookie, require_json
+```
+
+- `cors(*, allow_origins, allow_methods=("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"), allow_headers=("Content-Type", "Authorization"), allow_credentials=False, max_age=600)`: middleware. Only origins in `allow_origins` are reflected, by exact match. `"*"` is allowed only without credentials, otherwise `ValueError`. Preflight requests (OPTIONS with `Access-Control-Request-Method`) get 204.
+- `security_headers(*, csp="default-src 'self'", hsts_max_age=None)`: middleware. Adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a CSP, and optionally HSTS. Headers the handler already set are kept.
+- `RateLimiter(*, rate, burst, max_clients=10_000, clock=time.monotonic)`: token bucket keyed by client IP. `rate` is tokens per second, `burst` is the bucket size. `check(key)` returns `None` if allowed, or the seconds to wait. `middleware()` returns 429 with `Retry-After`. Memory is bounded by `max_clients`.
+- `ip_policy(*, allow=None, deny=None)`: middleware that allows or denies IP addresses and CIDR networks. `deny` is checked first. If `allow` is given, only those networks pass. Clients with an unknown address get 403. IPv4-mapped IPv6 clients are checked as IPv4.
+- `set_cookie(resp, name, value, *, max_age=None, path="/", secure=True, httponly=True, samesite="Lax")`: adds a `Set-Cookie` header to `resp` and returns `resp`. The value is URL-encoded. `SameSite=None` requires `secure=True`.
+- `require_json(schema)`: decorator for handlers. `schema` maps field names to types, or tuples of types such as `(int, float)`. A missing field or wrong type gets 400, and so does invalid JSON. A bool is rejected for an int field.
+
+```python
+@app.route("/users", method="POST")
+@require_json({"name": str, "age": int})
+async def create(req):
+    return Response.json({"ok": True})
+```
+
+### Compression
+
+```python
+from mini_aiohttp import gzip_middleware
+```
+
+`gzip_middleware(*, min_size=1024, level=6)` compresses buffered responses for clients that accept gzip. It skips bodies under `min_size`, responses that already have `Content-Encoding`, and types that are not text, JSON, JavaScript, XML or SVG. Streamed responses pass through unchanged. It adds `Vary: Accept-Encoding`. `level` must be 1 to 9.
+
+### Multipart uploads
+
+- Client: `session.request("POST", url, form={"title": "x"}, files={"avatar": ("a.png", data, "image/png")})`.
+- Server: `req.form()` returns `{name: [str or UploadedFile]}`. `UploadedFile` is a dataclass with `filename`, `content_type` and `data`. At most 200 parts are accepted.
+
+### Proxies
+
+- `proxy="http://host:port"`: HTTP proxy. HTTPS targets use CONNECT tunnels.
+- `proxy="socks5://user:pass@host:port"`: SOCKS5 proxy. DNS is resolved locally.
+- `proxy="socks5h://..."`: SOCKS5 proxy with DNS resolved by the proxy.
+
+An HTTP proxy must support CONNECT for HTTPS. Proxy authentication is supported for SOCKS5 only.
+
+### Optional accelerators
+
+- `use_uvloop()`: switches asyncio to uvloop if it is installed. Call it before `asyncio.run()`. Returns `True` when it switched.
+- `brotli` extra: enables `br` decoding. Without it, a `br` response raises `ClientError`.
+- `orjson` extra: used automatically by `Response.json`, `Request.json` and the JSON helpers when installed.
+- `certifi` extra: the default TLS context uses the certifi CA bundle.
+
+### Extras (`mini_aiohttp.extras`)
+
+Each extra imports its package only when it is used.
+
+- `metrics.prometheus_middleware(registry=None, *, namespace="http")` and `metrics_handler(registry=None)`: counts requests by method and status, records latency by method, and serves the Prometheus text format. Extra: `prometheus`.
+- `jwt_auth.jwt_auth(secret, *, algorithms=("HS256",), audience=None, issuer=None, exempt=())`: requires `Authorization: Bearer <token>`. Decoded claims are stored in `req.user`. Missing or invalid tokens get 401 with `WWW-Authenticate`. `exempt` lists exact paths that skip authentication. Extra: `jwt`.
+- `pydantic_json.validated_json(model)`: decorator that parses the body into a pydantic v2 model and stores it in `req.model`. Invalid JSON gets 400. Validation errors get 422 with `{"detail": [...]}`. Extra: `pydantic`.
+- `redis_limiter.RedisRateLimiter(client, *, rate, window=1, prefix="mini-aiohttp:rl", clock=time.time)`: fixed-window rate limit shared across processes. `client` is any async Redis client with `incr` and `expire`, such as `redis.asyncio.Redis`. `check(key)` is async. `middleware()` returns 429 with `Retry-After`. No extra package is needed.
+- `tracing.tracing_middleware(*, tracer_name="mini_aiohttp")`: creates one server span per request, with the method, path and status code. Spans use the globally configured OpenTelemetry tracer. Extra: `otel`.
+
+### Errors
+
+- `ClientError`: client-side failures, including malformed responses, oversized bodies, too many redirects and unsupported encodings.
+- `WebSocketError`: WebSocket handshake, frame and connection errors.
+- `ValueError`: invalid arguments, such as an unsupported URL scheme or an invalid header.
+- The server never lets a handler exception reach the client. It returns 500 and logs the traceback.
+
+---
+
 ## 🌊 Streaming Responses
 
 Create asynchronous chunked responses without buffering the complete response body.
@@ -300,14 +612,7 @@ Statistics are process-local and represent basic runtime counters.
 
 ## 🧪 Testing
 
-Clone the repository:
-
-```bash
-git clone https://github.com/hostunio16-ops/mini-aiohttp.git
-cd mini-aiohttp
-```
-
-Install development tools:
+From a source checkout, install the development tools:
 
 ```bash
 pip install -e ".[dev,all]"
@@ -385,10 +690,7 @@ Additional notes:
 
 ## 📚 Links
 
-- **GitHub Repository:** https://github.com/hostunio16-ops/mini-aiohttp
-- **Latest Release:** https://github.com/hostunio16-ops/mini-aiohttp/releases/tag/v0.5.6
 - **PyPI Package:** https://pypi.org/project/mini-aiohttp/
-- **GitHub Actions:** https://github.com/hostunio16-ops/mini-aiohttp/actions
 
 ---
 
