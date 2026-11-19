@@ -300,6 +300,7 @@ class HTTP2Server:
         self.idle_timeout = idle_timeout
         self._server = None
         self._connections: set = set()
+        self._connection_tasks: set = set()
         self._draining = False
         self.ssl_context.set_alpn_protocols(["h2"])
 
@@ -310,6 +311,9 @@ class HTTP2Server:
         if self._draining:
             writer.close()
             return
+        connection_task = asyncio.current_task()
+        if connection_task is not None:
+            self._connection_tasks.add(connection_task)
         config = h2.config.H2Configuration(client_side=False, header_encoding="utf-8")
         conn = h2.connection.H2Connection(config=config)
         conn.local_settings = Settings(
@@ -422,6 +426,9 @@ class HTTP2Server:
                 await writer.wait_closed()
             except (ConnectionError, OSError):
                 pass
+            finally:
+                if connection_task is not None:
+                    self._connection_tasks.discard(connection_task)
 
     async def start(self, host="127.0.0.1", port=8443):
         self._server = await asyncio.start_server(
@@ -453,6 +460,13 @@ class HTTP2Server:
             for task in list(state.tasks):
                 task.cancel()
             state.writer.close()
+
+        # Closing writers wakes the connection reader loops. Wait for those
+        # coroutines too, so stream cleanup and wait_closed() finish before return.
+        connection_tasks = set(self._connection_tasks)
+        if connection_tasks:
+            await asyncio.gather(*connection_tasks, return_exceptions=True)
+
         if self._server is not None:
             await self._server.wait_closed()
             self._server = None

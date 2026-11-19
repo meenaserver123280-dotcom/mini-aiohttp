@@ -127,10 +127,15 @@ async def test_exceeding_the_stream_limit_sends_goaway(tmp_path):
                 if isinstance(event, h2.events.ConnectionTerminated):
                     terminated = event
             writer.write(conn.data_to_send())
-            await writer.drain()
+            try:
+                await writer.drain()
+            except (ConnectionError, OSError):
+                # GOAWAY can be followed by an immediate server close.
+                break
         writer.close()
     finally:
         await server.close()
+    assert not server._connection_tasks, "server connection handler task was not awaited"
     assert terminated is not None, "client never received GOAWAY"
     assert terminated.error_code == 1  # PROTOCOL_ERROR
 
@@ -212,10 +217,15 @@ async def test_graceful_close_finishes_inflight_stream_then_sends_goaway(tmp_pat
             for event in conn.receive_data(data):
                 events.append(event)
             writer.write(conn.data_to_send())
-            await writer.drain()
+            try:
+                await writer.drain()
+            except (ConnectionError, OSError):
+                # The server may close after GOAWAY before the ACK drain completes.
+                break
     finally:
         writer.close()
         await closing
+    assert not server._connection_tasks, "server connection handler task was not awaited"
     assert any(isinstance(e, h2.events.StreamEnded) and e.stream_id == sid for e in events), \
         "in-flight response was not delivered before shutdown"
     terminated = [e for e in events if isinstance(e, h2.events.ConnectionTerminated)]
