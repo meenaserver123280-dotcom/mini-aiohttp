@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.1
+
+### Added
+- Route-level middleware with `route_middleware(*middlewares)` and route-specific rate limiting with `route_limit(limiter)`.
+- `BackgroundTasks` to track background coroutines and `TaskQueue` for bounded, concurrent job processing.
+- Graceful server lifecycle helpers: `serve()` and `shutdown_gracefully()`, including request draining, background-task cleanup and ordered shutdown hooks.
+- `TelegramWebhook` for Telegram webhook setup, deletion and information, secret-token verification, duplicate-update filtering and background update dispatch. Added `update_message()` for extracting supported message payloads.
+- Optional database adapters: `PostgresPool` (asyncpg), `RedisClient` (redis.asyncio), `SQLAlchemyEngine`, `MongoDatabase` (Motor) and `FirebaseRTDB` (Firebase Realtime Database REST API).
+- Usage examples and a feature guide in `examples/` and `docs/features.md`.
+
+### Packaging
+- Bumped the package version to 1.2.1 in package metadata and `mini_aiohttp.__version__`.
+- Updated README version references and linked the new feature guide.
+
+### Notes
+- The core package remains dependency-free. Database drivers are installed only through their optional extras; Firebase Realtime Database uses the existing `ClientSession`.
+- This release packages the features merged in PR #13; no additional runtime code changes are included in this release-preparation PR.
+
 ## 1.1.2
 
 ### Fixed

@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v1.1.2** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v1.2.1** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.1.2-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-1.2.1-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -37,6 +37,10 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Optional HTTP/2 client/server adapters using ALPN, with pooled connections and parallel streams (`pip install mini-aiohttp[http2]`).
 - Optional HTTP/3 client/server adapters using QUIC, with pooled connections and parallel streams (`pip install mini-aiohttp[http3]`).
 - Telegram Bot API polling (`TelegramPoller`).
+- Route-level middleware and per-route rate limiting (`route_middleware()`, `route_limit()`).
+- Tracked background tasks, bounded worker queues and graceful shutdown (`BackgroundTasks`, `TaskQueue`, `serve()`).
+- Telegram webhook management with secret-token validation and duplicate-update filtering (`TelegramWebhook`).
+- Optional PostgreSQL, Redis, SQLAlchemy, MongoDB and Firebase Realtime Database adapters (`mini_aiohttp.db`).
 
 ### HTTP Server
 - Asynchronous HTTP server with optional Rust-accelerated request parsing and response serialization (pure-Python fallbacks supported).
@@ -117,7 +121,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==1.1.2
+pip install mini-aiohttp==1.2.1
 ```
 
 Upgrade an existing installation:
@@ -149,7 +153,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "1.1.2"
+        "version": "1.2.1"
     })
 
 @app.route("/hello/{name}")
@@ -1126,6 +1130,7 @@ Additional notes:
 ## 📚 Links
 
 - **PyPI Package:** https://pypi.org/project/mini-aiohttp/
+- **Feature guide:** [docs/features.md](docs/features.md)
 
 ---
 
@@ -1135,6 +1140,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v1.1.2**
+**mini-aiohttp v1.2.1**
 
 *Lightweight. Asynchronous. Flexible.*
