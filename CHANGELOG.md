@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1
+
+### Changed
+- README: documents the 1.1 features (multi-range `StaticFiles`, WebSocket permessage-deflate, the `mini_aiohttp.ai` chat helper). Version strings now say 1.1.1. The outdated notes that said multi-range requests and WebSocket compression were unsupported are removed.
+
+### Notes
+- No library code changes. The package behaves the same as 1.1.0.
+
 ## 1.1.0
 
 ### Added
