@@ -43,6 +43,12 @@ prometheus = ["prometheus-client>=0.17"]
 jwt = ["pyjwt>=2.8"]
 pydantic = ["pydantic>=2.0"]
 otel = ["opentelemetry-api>=1.20"]
+# Database drivers for mini_aiohttp.db (one per database, or all with `database`)
+asyncpg = ["asyncpg>=0.29"]
+redis = ["redis>=5.0"]
+sqlalchemy = ["sqlalchemy[asyncio]>=2.0"]
+mongo = ["motor>=3.3"]
+database = ["asyncpg>=0.29", "redis>=5.0", "sqlalchemy[asyncio]>=2.0", "motor>=3.3"]
 # Development and tests
 test = [
     "pytest>=7",
