@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v1.1.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v1.1.2** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.1.0-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-1.1.2-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -117,7 +117,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==1.1.0
+pip install mini-aiohttp==1.1.2
 ```
 
 Upgrade an existing installation:
@@ -149,7 +149,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "1.1.0"
+        "version": "1.1.2"
     })
 
 @app.route("/hello/{name}")
@@ -774,7 +774,7 @@ Use the standalone server when the WebSocket endpoints need their own port, or w
 **Client:**
 
 ```python
-WebSocket.connect(url, *, headers=None, ssl_context=None, timeout=10.0)  # ws:// or wss://
+WebSocket.connect(url, *, headers=None, ssl_context=None, timeout=10.0, compression=True)  # ws:// or wss://
 ```
 
 - `send(data)`: `str` is sent as a text message, bytes-like as a binary message.
@@ -816,6 +816,30 @@ await server.start("127.0.0.1", 8765)
 Message compression (permessage-deflate, RFC 7692) is offered by default. Pass `compression=False` to `WebSocket.connect()` to turn it off. `WebSocket.accept()` negotiates it on the server side.
 
 `WebSocketError` is raised for invalid handshakes, frames, or use of a closed connection.
+
+### AI chat helper (`mini_aiohttp.ai`)
+
+```python
+from mini_aiohttp import ClientSession, groq, gemini, openrouter, ollama, ChatClient, AIError
+```
+
+An OpenAI-compatible `/chat/completions` client. It builds requests and reads replies only, so no provider SDK is needed.
+
+```python
+async with ClientSession() as session:
+    ai = groq(session, api_key=os.environ["GROQ_API_KEY"], model="<model name>")
+    print(await ai.chat([{"role": "user", "content": "Hello"}], temperature=0.2))
+
+    async for piece in ai.stream([{"role": "user", "content": "Tell me a story"}]):
+        print(piece, end="")
+```
+
+- Presets: `groq(session, *, api_key, model)`, `gemini(session, *, api_key, model)`, `openrouter(session, *, api_key, model)`, and `ollama(session, *, model, host="http://127.0.0.1:11434")`. Ollama needs no key.
+- `ChatClient(session, *, base_url, api_key, model, timeout=60.0, headers=None)`: for any other OpenAI-compatible endpoint. `base_url` must start with `https://` or `http://`. Pass `api_key=None` for servers that need no key.
+- `chat(messages, **options)` returns the reply text. `stream(messages, **options)` is an async generator of text pieces.
+- Extra keyword options (`temperature`, `max_tokens` and so on) are sent unchanged. `model`, `messages` and `stream` cannot be passed as options, because the client sets them. Passing one raises `ValueError`.
+- A non-200 reply raises `AIError`, which has `status` and `message`. The API key is never included in the message.
+- Model names change often, so check each provider's current model list.
 
 ### HTTP/2 adapters (extra: `http2`)
 
@@ -938,7 +962,8 @@ Each extra imports its package only when it is used.
 - `FormError`: a form body that cannot be parsed. It has a `status` for the response.
 - `TemplateError`: a missing template, or a variable missing from the template context.
 - `TelegramError`: Telegram answered with `ok=false`, or with an unexpected reply. Its `description` attribute holds Telegram's message.
-- `ValueError`: invalid arguments, such as an unsupported URL scheme, an invalid header, or a session secret shorter than 32 bytes.
+- `AIError`: the AI provider returned an error, or a reply that could not be understood. It has `status` and `message`.
+- `ValueError`: invalid arguments, such as an unsupported URL scheme, an invalid header, a session secret shorter than 32 bytes, or a reserved option passed to `ChatClient`.
 - The server never lets a handler exception reach the client. It returns 500 and logs the traceback.
 
 ---
@@ -1060,6 +1085,7 @@ python -m twine check dist/*
 | Retries | `RetryPolicy`: 429 and 502/503/504 with Retry-After and jittered backoff |
 | SOCKS5 and Tor | Yes, HTTP targets; `tor_proxy()` preset |
 | Webhooks and Telegram | `WebhookRouter`, `TelegramPoller` |
+| AI chat | `ChatClient` and presets for Groq, Gemini, OpenRouter, Ollama |
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`): pooled client, parallel streams, limits, graceful close |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`): pooled client, parallel streams, limits, graceful close |
 | WebSockets | RFC 6455 client; server on the HTTP port (`Server.websocket`) or standalone (`WebSocketServer`); permessage-deflate |
@@ -1075,7 +1101,7 @@ python -m twine check dist/*
 - HTTP/3 `max_concurrent_streams` is enforced by the application. aioquic advertises a fixed QUIC stream limit of 128 per connection, so keep the server's limit at or below that.
 - WebSocket endpoints on the HTTP port (`Server.websocket`) bypass middleware, so authentication and Origin checks belong in the handler. The standalone `WebSocketServer` has the same limits.
 - WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
-- WebSocket compression (permessage-deflate) is negotiated by default for `WebSocket.connect()`. Pass `compression=False` to turn it off.
+- WebSocket compression (`permessage-deflate`) is negotiated by default for `WebSocket.connect()`. Pass `compression=False` to turn it off.
 - `StaticFiles` answers multi-range requests with `multipart/byteranges`. Range and ETag are not available through the older `Server.static()` handler.
 - `StaticFiles` ETags are based on size and modification time, not content hashes.
 - Sessions are signed, not encrypted. The data is readable by the client, and a stolen cookie is valid until it expires.
@@ -1083,6 +1109,7 @@ python -m twine check dist/*
 - No automatic multi-process worker manager is included. Use your ASGI server's worker options (for example `uvicorn --workers`) with `ASGIApp`.
 - WebSockets are not available through `ASGIApp`. Use `Server.websocket` on the built-in server, or run `WebSocketServer` on its own port.
 - `TelegramPoller` and `WebhookRouter` do not handle Telegram's file downloads or payment flows. They only deliver updates to your handler.
+- `ChatClient` is a thin OpenAI-compatible client. It does not handle provider-specific features such as tool calling or file uploads.
 
 Additional notes:
 
@@ -1108,6 +1135,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v1.1.0**
+**mini-aiohttp v1.1.2**
 
 *Lightweight. Asynchronous. Flexible.*

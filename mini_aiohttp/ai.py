@@ -20,6 +20,9 @@ from __future__ import annotations
 import json
 
 _MAX_ERROR_TEXT = 300
+# Set by ChatClient itself. Callers cannot override these through extra options.
+_RESERVED_OPTIONS = frozenset({"model", "messages", "stream"})
+_DONE = object()
 
 
 class AIError(Exception):
@@ -49,13 +52,38 @@ def _provider_message(resp) -> str:
     return raw.decode("utf-8", "replace")[:_MAX_ERROR_TEXT]
 
 
+def _delta_text(event) -> str:
+    try:
+        delta = event["choices"][0].get("delta") or {}
+        return delta.get("content") or ""
+    except (KeyError, IndexError, TypeError, AttributeError):
+        return ""
+
+
+def _parse_sse_line(line: bytes, status: int):
+    """Return the text in one SSE line, ``_DONE`` for the end marker, or ``""``."""
+    line = line.strip()
+    if not line.startswith(b"data:"):
+        return ""
+    payload = line[5:].strip()
+    if payload == b"[DONE]":
+        return _DONE
+    try:
+        event = json.loads(payload)
+    except ValueError as exc:
+        raise AIError(status, "invalid stream event") from exc
+    return _delta_text(event)
+
+
 class ChatClient:
     """Send chat requests to one OpenAI-compatible endpoint.
 
     ``base_url`` is the API root, for example ``https://api.groq.com/openai/v1``.
     ``api_key`` is sent as a Bearer token. Pass ``None`` for local servers that need no key.
     Extra keyword arguments to ``chat()`` and ``stream()`` (``temperature``,
-    ``max_tokens`` and so on) are sent unchanged in the request body.
+    ``max_tokens`` and so on) are sent unchanged in the request body. ``model``,
+    ``messages`` and ``stream`` cannot be passed this way; use the constructor and
+    the method arguments instead.
     """
 
     def __init__(
@@ -86,15 +114,22 @@ class ChatClient:
         return out
 
     def _body(self, messages, stream: bool, options: dict) -> dict:
-        body = {"model": self._model, "messages": list(messages), "stream": stream}
-        body.update(options)
+        clash = _RESERVED_OPTIONS.intersection(options)
+        if clash:
+            names = ", ".join(sorted(clash))
+            raise ValueError(f"{names} cannot be passed as options; ChatClient sets them")
+        body = dict(options)
+        body["model"] = self._model
+        body["messages"] = list(messages)
+        body["stream"] = stream
         return body
 
     async def chat(self, messages, **options) -> str:
         """Return the full reply text for ``messages``."""
+        body = self._body(messages, False, options)
         resp = await self._session.request(
             "POST", self._url, headers=self._request_headers(),
-            json=self._body(messages, False, options), timeout=self._timeout,
+            json=body, timeout=self._timeout,
         )
         if resp.status != 200:
             raise AIError(resp.status, _provider_message(resp))
@@ -106,9 +141,10 @@ class ChatClient:
 
     async def stream(self, messages, **options):
         """Yield reply text pieces as the provider produces them."""
+        body = self._body(messages, True, options)
         resp = await self._session.request(
             "POST", self._url, headers=self._request_headers(),
-            json=self._body(messages, True, options), timeout=self._timeout, stream=True,
+            json=body, timeout=self._timeout, stream=True,
         )
         if resp.status != 200:
             try:
@@ -123,29 +159,18 @@ class ChatClient:
                 buffer += chunk
                 while b"\n" in buffer:
                     line, buffer = buffer.split(b"\n", 1)
-                    line = line.strip()
-                    if not line.startswith(b"data:"):
-                        continue
-                    payload = line[5:].strip()
-                    if payload == b"[DONE]":
+                    piece = _parse_sse_line(line, resp.status)
+                    if piece is _DONE:
                         return
-                    try:
-                        event = json.loads(payload)
-                    except ValueError as exc:
-                        raise AIError(resp.status, "invalid stream event") from exc
-                    piece = _delta_text(event)
                     if piece:
                         yield piece
+            # The stream ended without a newline after the last event. Handle that tail too.
+            if buffer.strip():
+                piece = _parse_sse_line(buffer, resp.status)
+                if piece is not _DONE and piece:
+                    yield piece
         finally:
             await resp.aclose()
-
-
-def _delta_text(event) -> str:
-    try:
-        delta = event["choices"][0].get("delta") or {}
-        return delta.get("content") or ""
-    except (KeyError, IndexError, TypeError, AttributeError):
-        return ""
 
 
 def groq(session, *, api_key: str, model: str, **options) -> ChatClient:

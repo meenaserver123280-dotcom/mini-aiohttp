@@ -24,7 +24,7 @@ from .traffic import TrafficRecorderMiddleware
 from .webhook import WebhookRouter
 from .websocket import WebSocket, WebSocketError, WebSocketServer
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 __all__ = [
     "ClientSession", "ClientError", "CookieJar", "Server", "Request", "Response",
     "UploadedFile", "RateLimiter", "cors", "ip_policy", "require_json",
