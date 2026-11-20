@@ -1,11 +1,11 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v1.0.1** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v1.1.0** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.0.1-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-1.1.0-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
 
 ---
@@ -31,7 +31,8 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Response size limits.
 - JSON parsing on responses (`response.json()`).
 
-- Standalone WebSocket client and server (`ws://` / `wss://`).
+- Standalone WebSocket client and server (`ws://` / `wss://`), with permessage-deflate compression (RFC 7692).
+- OpenAI-compatible chat helper for Groq, Gemini, OpenRouter and Ollama (`mini_aiohttp.ai`, `ChatClient` with `chat()` and streaming `stream()`).
 - Automatic HTTPS client: ALPN selects HTTP/2 when available, otherwise HTTP/1.1; Alt-Svc enables HTTP/3 on subsequent requests (`AutoClientSession`).
 - Optional HTTP/2 client/server adapters using ALPN, with pooled connections and parallel streams (`pip install mini-aiohttp[http2]`).
 - Optional HTTP/3 client/server adapters using QUIC, with pooled connections and parallel streams (`pip install mini-aiohttp[http3]`).
@@ -49,7 +50,7 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Chunked request-body decoding.
 - Chunked streaming responses.
 - HTTPS support using SSLContext.
-- Static file serving with HTTP `Range` (206/416), `ETag`, `Last-Modified` and conditional GET (`StaticFiles`).
+- Static file serving with HTTP `Range` (single and multi-range, 206/416), `ETag`, `Last-Modified` and conditional GET (`StaticFiles`).
 - Signed-cookie sessions (`SessionMiddleware`).
 - Form body parsing with size limits (`parse_urlencoded`).
 - Minimal template engine with HTML escaping (`Template`, `TemplateLoader`).
@@ -116,7 +117,7 @@ pip install "mini-aiohttp[all]"
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==1.0.1
+pip install mini-aiohttp==1.1.0
 ```
 
 Upgrade an existing installation:
@@ -148,7 +149,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "1.0.1"
+        "version": "1.1.0"
     })
 
 @app.route("/hello/{name}")
@@ -428,7 +429,7 @@ Register it as middleware: `app.middleware_(StaticFiles("/static", "public"))`. 
 |---|---|
 | Methods | GET and HEAD. Other methods get 405 with `Allow: GET, HEAD`. |
 | Missing file | 404. Paths that escape `directory`, including encoded `..`, are 404. |
-| Range | One byte range per request: `bytes=a-b`, `bytes=a-`, or suffix `bytes=-n`. Returns 206 with `Content-Range`. An unsatisfiable range returns 416 with `Content-Range: bytes */size`. A malformed or multi-range header is ignored and the full file is sent. |
+| Range | Byte ranges: `bytes=a-b`, `bytes=a-`, or suffix `bytes=-n`. One range returns 206 with `Content-Range`. Several ranges in one request return 206 as `multipart/byteranges`. An unsatisfiable range returns 416 with `Content-Range: bytes */size`. A malformed header is ignored and the full file is sent. |
 | `Accept-Ranges` | `bytes` on every response. |
 | `ETag` | Built from size and modification time. Weak comparison is used. |
 | `Last-Modified` | Set on every response. |
@@ -812,6 +813,8 @@ server = WebSocketServer(handler)
 await server.start("127.0.0.1", 8765)
 ```
 
+Message compression (permessage-deflate, RFC 7692) is offered by default. Pass `compression=False` to `WebSocket.connect()` to turn it off. `WebSocket.accept()` negotiates it on the server side.
+
 `WebSocketError` is raised for invalid handshakes, frames, or use of a closed connection.
 
 ### HTTP/2 adapters (extra: `http2`)
@@ -1051,7 +1054,7 @@ python -m twine check dist/*
 | Streaming Responses | Yes |
 | Content-Encoding | gzip, deflate (core); br (`brotli` extra) |
 | Response compression | gzip middleware (core) |
-| Static files | `StaticFiles`: Range (single range), ETag, Last-Modified, conditional GET |
+| Static files | `StaticFiles`: Range (single and multi-range), ETag, Last-Modified, conditional GET |
 | Sessions | `SessionMiddleware`: signed cookies, HMAC-SHA256 |
 | Forms and templates | `parse_urlencoded`, `Template`, `TemplateLoader` |
 | Retries | `RetryPolicy`: 429 and 502/503/504 with Retry-After and jittered backoff |
@@ -1059,7 +1062,7 @@ python -m twine check dist/*
 | Webhooks and Telegram | `WebhookRouter`, `TelegramPoller` |
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`): pooled client, parallel streams, limits, graceful close |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`): pooled client, parallel streams, limits, graceful close |
-| WebSockets | RFC 6455 client; server on the HTTP port (`Server.websocket`) or standalone (`WebSocketServer`) |
+| WebSockets | RFC 6455 client; server on the HTTP port (`Server.websocket`) or standalone (`WebSocketServer`); permessage-deflate |
 | ASGI 3 | `ASGIApp` for HTTP and lifespan (no WebSocket) |
 | Prebuilt wheels | Linux x86_64, macOS x86_64 and arm64, Windows x86_64 (CPython 3.11–3.13) |
 
@@ -1072,8 +1075,8 @@ python -m twine check dist/*
 - HTTP/3 `max_concurrent_streams` is enforced by the application. aioquic advertises a fixed QUIC stream limit of 128 per connection, so keep the server's limit at or below that.
 - WebSocket endpoints on the HTTP port (`Server.websocket`) bypass middleware, so authentication and Origin checks belong in the handler. The standalone `WebSocketServer` has the same limits.
 - WebSocket Origin checking is not built in. If you authenticate with cookies, validate the `Origin` header in your handler.
-- WebSocket compression (`permessage-deflate`) is not implemented.
-- `StaticFiles` serves one byte range per request. Multi-range requests are answered with the full file. Range and ETag are not available through the older `Server.static()` handler.
+- WebSocket compression (permessage-deflate) is negotiated by default for `WebSocket.connect()`. Pass `compression=False` to turn it off.
+- `StaticFiles` answers multi-range requests with `multipart/byteranges`. Range and ETag are not available through the older `Server.static()` handler.
 - `StaticFiles` ETags are based on size and modification time, not content hashes.
 - Sessions are signed, not encrypted. The data is readable by the client, and a stolen cookie is valid until it expires.
 - The template engine has no loops, conditions or template inheritance. Use Python for logic.
@@ -1105,6 +1108,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v1.0.1**
+**mini-aiohttp v1.1.0**
 
 *Lightweight. Asynchronous. Flexible.*
