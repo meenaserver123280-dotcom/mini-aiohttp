@@ -164,11 +164,20 @@ async def test_stream_error_status_raises_ai_error():
     assert "bad key" in info.value.message
 
 
-@pytest.mark.parametrize("name", ["model", "messages", "stream"])
+@pytest.mark.parametrize("name", ["model", "stream"])
 async def test_reserved_options_are_rejected(name):
     session = _FakeSession(_FakeResponse(200))
     with pytest.raises(ValueError):
         await _client(session).chat([{"role": "user", "content": "x"}], **{name: "override"})
+    assert session.sent == []
+
+
+async def test_messages_cannot_be_passed_as_an_option():
+    # messages is a positional parameter of chat(), so a keyword of the same name
+    # never reaches the request body. Python raises TypeError before any request is made.
+    session = _FakeSession(_FakeResponse(200))
+    with pytest.raises(TypeError):
+        await _client(session).chat(messages=[{"role": "user", "content": "x"}])
     assert session.sent == []
 
 
