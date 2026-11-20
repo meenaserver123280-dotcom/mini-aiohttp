@@ -117,10 +117,18 @@ async def test_malformed_range_is_ignored(root):
     assert body == CONTENT
 
 
-async def test_multi_range_is_ignored(root):
+async def test_multi_range_returns_multipart(root):
     resp, body = await _get(root, "/static/data.txt", range="bytes=0-1,5-6")
-    assert resp.status == 200
-    assert body == CONTENT
+    assert resp.status == 206
+    content_type = resp.headers["content-type"]
+    assert content_type.startswith("multipart/byteranges; boundary=")
+    boundary = content_type.split("boundary=", 1)[1].encode()
+    assert b"Content-Range: bytes 0-1/20" in body
+    assert b"Content-Range: bytes 5-6/20" in body
+    assert b"\r\n01\r\n" in body
+    assert b"\r\n56\r\n" in body
+    assert body.endswith(b"--" + boundary + b"--\r\n")
+    assert resp._known_length == len(body)
 
 
 async def test_if_range_with_matching_etag_keeps_partial(root):
