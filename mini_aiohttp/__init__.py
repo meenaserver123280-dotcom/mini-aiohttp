@@ -1,5 +1,6 @@
 """mini-aiohttp: a small asyncio HTTP client and server toolkit."""
 from ._optional import use_uvloop
+from .ai import AIError, ChatClient, gemini, groq, ollama, openrouter
 from .asgi import ASGIApp
 from .auto import AutoClientSession
 from .batch import fetch_all, gather_requests
@@ -35,4 +36,5 @@ __all__ = [
     "Template", "TemplateLoader", "TemplateError", "html_response",
     "RetryPolicy", "socks5_url", "tor_proxy", "HeaderRotator", "merge_headers",
     "TrafficRecorderMiddleware", "WebhookRouter", "TelegramPoller", "TelegramError",
+    "ChatClient", "AIError", "groq", "gemini", "openrouter", "ollama",
 ]
