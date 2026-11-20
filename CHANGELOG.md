@@ -1,9 +1,21 @@
 # Changelog
 
+## 1.1.2
+
+### Fixed
+- `ChatClient.stream()` now yields a final SSE event that arrives without a trailing newline. Before, that last piece could be dropped.
+- `ChatClient.chat()` and `stream()` reject extra options named `model`, `messages` or `stream` with `ValueError`. These fields are set by the client, so an option cannot overwrite them.
+
+### Documentation
+- README version strings say 1.1.2. The 1.1.1 README still showed 1.1.0.
+
+### Notes
+- Apart from the fixes above, existing behaviour is unchanged.
+
 ## 1.1.1
 
 ### Changed
-- README: documents the 1.1 features (multi-range `StaticFiles`, WebSocket permessage-deflate, the `mini_aiohttp.ai` chat helper). Version strings now say 1.1.1. The outdated notes that said multi-range requests and WebSocket compression were unsupported are removed.
+- README: documents the 1.1 features (multi-range `StaticFiles`, WebSocket permessage-deflate, the `mini_aiohttp.ai` chat helper). The outdated notes that said multi-range requests and WebSocket compression were unsupported are removed.
 
 ### Notes
 - No library code changes. The package behaves the same as 1.1.0.
