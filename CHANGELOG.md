@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+- `mini_aiohttp.ai`: `ChatClient` for OpenAI-compatible chat APIs, with `chat()` and streaming `stream()`. Presets: `groq`, `gemini`, `openrouter` and `ollama`. `AIError` never includes the API key.
+- WebSocket permessage-deflate (RFC 7692). `connect()` offers it by default, and `compression=False` turns it off. `WebSocket.accept()` negotiates it on the server. Both context-takeover modes are supported.
+- `StaticFiles` multi-range: several ranges in one request return 206 as `multipart/byteranges`.
+
+### Changed
+- A `Range` header with several ranges is no longer ignored. Earlier versions sent the whole file with 200.
+
+### Notes
+- Apart from the multi-range change, existing behaviour is unchanged.
+
 ## 1.0.1
 
 ### Packaging
