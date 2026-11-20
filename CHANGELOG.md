@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+### Packaging
+- Releases are published with PyPI Trusted Publishing (`.github/workflows/release.yml`). No API token is stored in the repository. Each distribution now carries a provenance attestation, so PyPI no longer shows the "loss of provenance" notice for this release.
+- The publishing workflow was renamed from `publish.yml` to `release.yml`.
+
+### Notes
+- No library code changes. The package behaves the same as 1.0.0.
+
 ## 1.0.0
 
 The same features as 0.10.0, which is already on PyPI. This release is the first to carry the 1.0.0 version number.
