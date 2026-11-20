@@ -172,12 +172,12 @@ async def test_reserved_options_are_rejected(name):
     assert session.sent == []
 
 
-async def test_messages_cannot_be_passed_as_an_option():
-    # messages is a positional parameter of chat(), so a keyword of the same name
-    # never reaches the request body. Python raises TypeError before any request is made.
+async def test_messages_option_clashes_with_argument():
+    # messages is positional in chat(), so passing it again as a keyword is a
+    # duplicate argument. Python raises TypeError before any request is sent.
     session = _FakeSession(_FakeResponse(200))
     with pytest.raises(TypeError):
-        await _client(session).chat(messages=[{"role": "user", "content": "x"}])
+        await _client(session).chat([{"role": "user", "content": "x"}], messages="override")
     assert session.sent == []
 
 
