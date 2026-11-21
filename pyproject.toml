@@ -4,11 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mini-aiohttp"
-version = "1.4.1"
+version = "1.4.2"
 description = "A lightweight asyncio HTTP toolkit with HTTP/1.1, optional HTTP/2 and HTTP/3, WebSockets, and proxy support"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{name = "Sumit Sharma", email = "sharmasumit5141@gmail.com"}]
+maintainers = [{name = "Sumit Sharma", email = "sharmasumit5141@gmail.com"}]
 requires-python = ">=3.11"
 dependencies = []
 keywords = ["asyncio", "http", "client", "server", "websocket", "http2", "http3", "proxy", "asgi"]
