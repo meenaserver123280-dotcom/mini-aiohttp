@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.1
+
+### Documentation
+- README rewritten as the complete documentation for the library: installation and extras, quick start, guides (route limits, background tasks and graceful shutdown, Telegram webhook, database adapters, authentication and CSRF, running behind Cloudflare), the full API reference, streaming, testing, compatibility and protocol limitations. Every feature has an example.
+- README version references now show 1.4.1.
+- `docs/` is no longer linked from the README. The repository is private, so the documentation lives in one place.
+
+### Notes
+- No library code changes. The package behaves the same as 1.4.0.
+
 ## 1.4.0
 
 ### Added
