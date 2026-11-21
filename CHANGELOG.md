@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+- `csrf_protect(secret)` (`mini_aiohttp.auth`): CSRF protection with a signed token in an HttpOnly, SameSite=Lax cookie. POST, PUT, PATCH and DELETE need the token in the `X-CSRF-Token` header or a urlencoded form field `csrf_token`, otherwise they get 403. `req.csrf_token` is available for templates.
+- `basic_auth(users | verify=...)`: HTTP Basic authentication. Failures get 401 with `WWW-Authenticate`. Sets `req.user` on success.
+- `api_key_auth(keys | verify=...)`: API keys in the `X-API-Key` header (configurable). Keys are compared as SHA-256 digests in constant time.
+- Reason phrase for status 401.
+- `docs/auth.md`: usage and notes on client IP handling.
+
+### Notes
+- Client IP is still the socket peer address (`req.client`). Address headers such as `X-Forwarded-For` are not read, so clients cannot spoof the IP used by `RateLimiter`.
+- The README version badge is updated in a follow-up.
+
 ## 1.2.1
 
 ### Added
