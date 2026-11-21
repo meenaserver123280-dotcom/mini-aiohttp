@@ -2,6 +2,7 @@
 from ._optional import use_uvloop
 from .ai import AIError, ChatClient, gemini, groq, ollama, openrouter
 from .asgi import ASGIApp
+from .auth import api_key_auth, basic_auth, csrf_protect
 from .auto import AutoClientSession
 from .batch import fetch_all, gather_requests
 from .client import ClientError, ClientSession
@@ -45,4 +46,5 @@ __all__ = [
     "route_limit", "route_middleware",
     "PostgresPool", "RedisClient", "SQLAlchemyEngine", "MongoDatabase",
     "FirebaseRTDB", "FirebaseError",
+    "csrf_protect", "basic_auth", "api_key_auth",
 ]
