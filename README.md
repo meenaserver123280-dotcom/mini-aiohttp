@@ -1,12 +1,34 @@
 # ⚡ mini-aiohttp
 
-**mini-aiohttp v1.2.1** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
+**mini-aiohttp v1.4.1** is a lightweight, asynchronous HTTP/1.1 client and server framework built with Python and asyncio, with optional HTTP/2, HTTP/3, WebSocket and ASGI support.
 
 Designed for simplicity, performance, flexibility and security. The core has no required dependencies and keeps pure-Python fallbacks. Prebuilt wheels include an optional PyO3 extension that accelerates HTTP request-head parsing and buffered response serialization.
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.2.1-green)](https://pypi.org/project/mini-aiohttp/)
+[![Version](https://img.shields.io/badge/Version-1.4.1-green)](https://pypi.org/project/mini-aiohttp/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/license/mit)
+
+---
+
+## 📑 Contents
+
+- [Features](#-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Guides](#-guides)
+  - [Route-level middleware and rate limits](#route-level-middleware-and-rate-limits)
+  - [Background tasks, worker queue and graceful shutdown](#background-tasks-worker-queue-and-graceful-shutdown)
+  - [Telegram webhook](#telegram-webhook)
+  - [Database adapters](#database-adapters)
+  - [Authentication and CSRF](#authentication-and-csrf)
+  - [Running behind Cloudflare](#running-behind-cloudflare)
+- [API Reference](#-api-reference)
+- [Streaming Responses](#-streaming-responses)
+- [Server Statistics](#-server-statistics)
+- [Testing](#-testing)
+- [Compatibility](#-compatibility)
+- [Protocol Limitations](#-protocol-limitations)
+- [License](#-license)
 
 ---
 
@@ -30,52 +52,49 @@ Designed for simplicity, performance, flexibility and security. The core has no 
 - Request and response hooks.
 - Response size limits.
 - JSON parsing on responses (`response.json()`).
-
-- Standalone WebSocket client and server (`ws://` / `wss://`), with permessage-deflate compression (RFC 7692).
-- OpenAI-compatible chat helper for Groq, Gemini, OpenRouter and Ollama (`mini_aiohttp.ai`, `ChatClient` with `chat()` and streaming `stream()`).
-- Automatic HTTPS client: ALPN selects HTTP/2 when available, otherwise HTTP/1.1; Alt-Svc enables HTTP/3 on subsequent requests (`AutoClientSession`).
-- Optional HTTP/2 client/server adapters using ALPN, with pooled connections and parallel streams (`pip install mini-aiohttp[http2]`).
-- Optional HTTP/3 client/server adapters using QUIC, with pooled connections and parallel streams (`pip install mini-aiohttp[http3]`).
-- Telegram Bot API polling (`TelegramPoller`).
-- Route-level middleware and per-route rate limiting (`route_middleware()`, `route_limit()`).
-- Tracked background tasks, bounded worker queues and graceful shutdown (`BackgroundTasks`, `TaskQueue`, `serve()`).
-- Telegram webhook management with secret-token validation and duplicate-update filtering (`TelegramWebhook`).
-- Optional PostgreSQL, Redis, SQLAlchemy, MongoDB and Firebase Realtime Database adapters (`mini_aiohttp.db`).
+- Standalone WebSocket client (`ws://` / `wss://`), with permessage-deflate compression (RFC 7692).
+- OpenAI-compatible chat helper for Groq, Gemini, OpenRouter and Ollama (`mini_aiohttp.ai`).
+- Automatic HTTPS client: ALPN selects HTTP/2 when available, otherwise HTTP/1.1; Alt-Svc enables HTTP/3 on later requests (`AutoClientSession`).
+- Optional HTTP/2 client and server adapters (`pip install mini-aiohttp[http2]`).
+- Optional HTTP/3 client and server adapters (`pip install mini-aiohttp[http3]`).
+- Telegram Bot API polling (`TelegramPoller`) and webhooks (`TelegramWebhook`).
 
 ### HTTP Server
 - Asynchronous HTTP server with optional Rust-accelerated request parsing and response serialization (pure-Python fallbacks supported).
-- Custom routing and path parameters.
-- Middleware support, including a traffic recorder for inspecting recent requests.
+- Routing with path parameters.
+- Route-level middleware and per-route rate limiting (`route_middleware()`, `route_limit()`).
+- Global middleware, including a traffic recorder for inspecting recent requests.
 - WebSocket endpoints on the HTTP port (`Server.websocket`).
 - Webhook receiver with secret token check, update deduplication and background dispatch (`WebhookRouter`).
 - ASGI 3 adapter (`ASGIApp`) for uvicorn, hypercorn and other ASGI servers.
 - Gzip response compression middleware (`gzip_middleware`).
-- HTTP/1.1 persistent connections.
-- Chunked request-body decoding.
-- Chunked streaming responses.
-- HTTPS support using SSLContext.
+- Background tasks, bounded worker queues and graceful shutdown (`BackgroundTasks`, `TaskQueue`, `serve()`).
+- HTTP/1.1 persistent connections, chunked request bodies and chunked streaming responses.
+- HTTPS support using `SSLContext`.
 - Static file serving with HTTP `Range` (single and multi-range, 206/416), `ETag`, `Last-Modified` and conditional GET (`StaticFiles`).
 - Signed-cookie sessions (`SessionMiddleware`).
 - Form body parsing with size limits (`parse_urlencoded`).
 - Minimal template engine with HTML escaping (`Template`, `TemplateLoader`).
 - Path traversal protection.
-- Graceful server shutdown.
-- Connection limits.
-- Runtime server statistics.
+- Connection limits and runtime server statistics.
 
 ### Security
-- HTTP header validation.
-- Request framing validation.
+- HTTP header validation and request framing validation.
 - Content-Length and Transfer-Encoding conflict protection.
-- CORS middleware.
-- Security headers.
-- Token-bucket rate limiting, and a Redis-backed limiter for multiple servers.
+- CSRF protection with signed tokens (`csrf_protect`).
+- HTTP Basic authentication (`basic_auth`) and API key authentication (`api_key_auth`).
+- CORS middleware and security headers.
+- Token-bucket rate limiting per client IP, and a Redis-backed limiter for multiple servers.
+- Real client IP behind Cloudflare, read only from trusted peers (`cloudflare_client_ip`).
 - IP/CIDR policies.
-- Secure cookie helpers.
-- Tamper-evident signed session cookies.
+- Secure cookie helpers and tamper-evident signed session cookies.
 - JWT bearer authentication middleware (extra).
 - JSON request validation, plain or with pydantic models (extra).
 - Bounded request and response parsing, fuzz-tested with hypothesis.
+
+### Database adapters
+- PostgreSQL (asyncpg), Redis, SQLAlchemy 2.x, MongoDB (motor) and Firebase Realtime Database (REST, no extra needed).
+- Drivers are optional extras. The core still has no dependencies.
 
 ### Observability (extras)
 - Prometheus metrics middleware and `/metrics` handler.
@@ -95,7 +114,7 @@ Requires Python 3.11 or newer.
 
 Prebuilt wheels are published for Linux x86_64, macOS (x86_64 and arm64) and Windows x86_64, on Python 3.11, 3.12 and 3.13. These wheels include the native Rust extension (`mini_aiohttp._native`). On any other platform, pip builds from the source distribution. If no Rust toolchain is available, the build still succeeds and the package uses its pure-Python parser and response serializer. Nothing in the API changes between the two.
 
-Optional extras:
+### Optional extras
 
 | Extra | What it adds |
 |---|---|
@@ -109,19 +128,26 @@ Optional extras:
 | `jwt` | JWT bearer auth middleware |
 | `pydantic` | Pydantic-validated JSON bodies |
 | `otel` | OpenTelemetry tracing middleware |
+| `asyncpg` | PostgreSQL driver for `PostgresPool` |
+| `redis` | Redis client for `RedisClient` |
+| `sqlalchemy` | SQLAlchemy 2.x async engine for `SQLAlchemyEngine` |
+| `mongo` | motor driver for `MongoDatabase` |
+| `database` | asyncpg, redis, sqlalchemy and motor together |
 | `all` | Every runtime extra above |
 
 ```bash
 pip install "mini-aiohttp[http2,http3]"
 pip install "mini-aiohttp[brotli,orjson,certifi]"
 pip install "mini-aiohttp[prometheus,jwt,pydantic,otel]"
+pip install "mini-aiohttp[asyncpg,redis]"
+pip install "mini-aiohttp[database]"
 pip install "mini-aiohttp[all]"
 ```
 
 Install a specific version:
 
 ```bash
-pip install mini-aiohttp==1.2.1
+pip install mini-aiohttp==1.4.1
 ```
 
 Upgrade an existing installation:
@@ -134,6 +160,7 @@ Verify installation:
 
 ```bash
 pip show mini-aiohttp
+python -c "import mini_aiohttp; print(mini_aiohttp.__version__)"
 ```
 
 ---
@@ -153,7 +180,7 @@ app.middleware_(gzip_middleware(min_size=1024))
 async def home(req):
     return Response.json({
         "message": "Welcome to mini-aiohttp",
-        "version": "1.2.1"
+        "version": "1.4.1"
     })
 
 @app.route("/hello/{name}")
@@ -220,10 +247,7 @@ from mini_aiohttp import ClientSession
 
 async def main():
     async with ClientSession() as session:
-        response = await session.get(
-            "https://example.com"
-        )
-
+        response = await session.get("https://example.com")
         print("Status:", response.status)
         print("Body:", response.text())
 
@@ -243,8 +267,7 @@ asyncio.run(main())
 ### Static files with Range and ETag
 
 ```python
-from mini_aiohttp import Server
-from mini_aiohttp.static import StaticFiles
+from mini_aiohttp import Server, StaticFiles
 
 app = Server()
 app.middleware_(StaticFiles("/static", "public"))
@@ -301,6 +324,7 @@ app.route("/metrics")(metrics_handler())
 ### JWT auth (optional)
 
 ```python
+from mini_aiohttp import Response
 from mini_aiohttp.extras.jwt_auth import jwt_auth
 
 app.middleware_(jwt_auth(secret="change-me", audience="my-api", exempt=("/health",)))
@@ -314,6 +338,7 @@ async def me(req):
 
 ```python
 from pydantic import BaseModel
+from mini_aiohttp import Response
 from mini_aiohttp.extras.pydantic_json import validated_json
 
 class User(BaseModel):
@@ -338,6 +363,458 @@ app.middleware_(limiter.middleware())
 
 ---
 
+## 📘 Guides
+
+### Route-level middleware and rate limits
+
+Global middleware runs for every request. Route-level middleware runs only for the handler it decorates. Global middleware still runs first.
+
+```python
+from mini_aiohttp import RateLimiter, Response, Server, route_limit, route_middleware
+
+app = Server()
+
+login_limiter = RateLimiter(rate=0.2, burst=5)   # 5 quick tries, then 1 every 5 seconds
+
+@app.route("/login", method="POST")
+@route_limit(login_limiter)
+async def login(req):
+    return Response.json({"ok": True})
+
+async def require_admin(req, call_next):
+    if req.headers.get("x-role") != "admin":
+        return Response(403, "admins only")
+    return await call_next(req)
+
+async def audit_log(req, call_next):
+    resp = await call_next(req)
+    print("audit:", req.method, req.path, resp.status)
+    return resp
+
+@app.route("/admin")
+@route_middleware(require_admin, audit_log)   # runs in the order listed
+async def admin(req):
+    return Response.json({"secret": 42})
+```
+
+- Each `route_limit` has its own bucket, so one route's traffic does not use up another route's limit.
+- Clients are keyed by `req.client`. See [Running behind Cloudflare](#running-behind-cloudflare) for proxies.
+- A handler may return a `Response`, a `str`, or `bytes`. Route middleware always receives a `Response` from `call_next`.
+
+### Background tasks, worker queue and graceful shutdown
+
+```python
+import asyncio
+from mini_aiohttp import BackgroundTasks, Response, Server, TaskQueue, serve
+
+app = Server()
+background = BackgroundTasks()
+
+async def refresh_cache():
+    while True:
+        await asyncio.sleep(60)
+        ...   # refresh something
+
+background.spawn(refresh_cache(), name="cache")
+
+async def send_email(job):
+    ...   # slow work: send an email, call an API, and so on
+
+queue = TaskQueue(send_email, workers=4, maxsize=1000, tasks=background)
+
+@app.route("/signup", method="POST")
+async def signup(req):
+    await queue.put({"to": req.json()["email"]})   # returns at once
+    return Response.json({"queued": True}, status=202)
+
+async def main():
+    # Blocks until SIGINT or SIGTERM, then runs the shutdown steps in order.
+    await serve(
+        app, "0.0.0.0", 8080,
+        grace=10,                       # seconds allowed for in-flight work
+        background=background,
+        shutdown=[queue.close],         # extra hooks run after background work finishes
+    )
+
+asyncio.run(main())
+```
+
+**What `serve()` does on shutdown:**
+1. Stops accepting new connections.
+2. Lets in-flight requests finish, for up to `grace` seconds, then closes the rest.
+3. Waits for tracked background tasks, for up to `grace` seconds, then cancels what is still running.
+4. Runs the `shutdown` hooks in the order you list them. A hook that raises is logged, and the rest still run.
+
+**Other details:**
+- `BackgroundTasks.spawn(coro, name=None)` returns the `asyncio.Task`. A failed task is logged. After `close()`, `spawn` raises `RuntimeError`.
+- `TaskQueue.put(job)` waits when the queue is full. `put_nowait(job)` raises `asyncio.QueueFull` instead. `qsize()` shows how many jobs are waiting. `join()` waits until every job is handled.
+- A job that raises is logged, and the worker keeps going.
+- Workers start on the first `put`, so you can create the queue before the event loop runs.
+- Each `serve()` call runs its own shutdown steps. For tests, pass `stop_event=asyncio.Event()` and set it instead of sending a signal. Pass `signals=()` to skip signal handlers.
+- On Windows, signal handlers are not installed. Use `stop_event` to stop the server.
+
+### Telegram webhook
+
+`TelegramWebhook` handles the whole webhook flow: it sets and removes the webhook with the Bot API, checks Telegram's secret token on every request, and runs your handler in the background.
+
+```python
+import os
+from mini_aiohttp import ClientSession, Server, TelegramWebhook, serve, update_message
+
+TOKEN = os.environ["BOT_TOKEN"]
+SECRET = os.environ["TG_SECRET"]        # 1-256 characters: A-Z, a-z, 0-9, _ or -
+
+app = Server()
+session = ClientSession()
+
+async def on_update(update: dict) -> None:
+    message = update_message(update)     # message, edited_message, channel_post or edited_channel_post
+    if message and message.get("text"):
+        ...   # reply, store, and so on
+
+bot = TelegramWebhook(session, TOKEN, on_update, secret_token=SECRET)
+bot.attach(app, "/telegram")             # POST /telegram
+
+async def main():
+    await bot.set_webhook("https://example.com/telegram", allowed_updates=["message"])
+    print(await bot.get_webhook_info())
+    await serve(app, "0.0.0.0", 8080, shutdown=[bot.close, session.close])
+
+asyncio.run(main())
+```
+
+- `set_webhook(url, *, allowed_updates=None, drop_pending=False, max_connections=None)`: the URL must start with `https://`. The secret token is sent to Telegram.
+- `delete_webhook(*, drop_pending=False)` removes the webhook.
+- `get_webhook_info()` returns Telegram's status dict (pending count, last error and so on).
+- Requests with a wrong or missing secret get 403. Valid updates get 200 at once. Duplicate `update_id`s are skipped.
+- `close()` waits for running handlers to finish.
+- Telegram API errors raise `TelegramError`, with Telegram's message in `.description`. The bot token never appears in logs.
+- Use either `TelegramWebhook` or `TelegramPoller`, not both. Telegram does not send `getUpdates` results while a webhook is set.
+
+### Database adapters
+
+Each adapter opens a client in `open()`, gives it to your handlers, and closes it in `close()`. Every adapter is also an async context manager. Pass `db.close` to `serve(..., shutdown=[...])` so the connections close on shutdown.
+
+Drivers are imported only when `open()` runs. The core library stays dependency-free.
+
+| Adapter | Extra | Use in handlers |
+|---|---|---|
+| `PostgresPool(dsn, **options)` | `asyncpg` | `db.pool.acquire()` |
+| `RedisClient(url, **options)` | `redis` | `db.client` (`redis.asyncio`) |
+| `SQLAlchemyEngine(url, **options)` | `sqlalchemy` | `db.session()` as an async context manager |
+| `MongoDatabase(uri, database, **options)` | `mongo` | `db.db["collection"]` (motor) |
+| `FirebaseRTDB(session, database_url, *, auth_token=None)` | none | `get`, `put`, `patch`, `push`, `delete` (REST) |
+
+#### PostgreSQL with asyncpg
+
+```bash
+pip install "mini-aiohttp[asyncpg]"
+```
+
+```python
+import asyncio
+import os
+from mini_aiohttp import Response, Server, serve
+from mini_aiohttp.db import PostgresPool
+
+db = PostgresPool(os.environ["DATABASE_URL"], min_size=1, max_size=10)
+app = Server()
+
+@app.route("/users/{user_id}")
+async def get_user(req):
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, name FROM users WHERE id = $1", int(req.params["user_id"])
+        )
+    if row is None:
+        return Response(404, "not found")
+    return Response.json({"id": row["id"], "name": row["name"]})
+
+async def main():
+    await db.open()
+    await serve(app, "127.0.0.1", 8080, grace=10, shutdown=[db.close])
+
+asyncio.run(main())
+```
+
+All keyword options (`min_size`, `max_size`, `command_timeout`, and so on) go straight to `asyncpg.create_pool`.
+
+#### Redis as a cache
+
+```bash
+pip install "mini-aiohttp[redis]"
+```
+
+```python
+import asyncio
+import os
+from mini_aiohttp import Response, Server, serve
+from mini_aiohttp.db import RedisClient
+
+cache = RedisClient(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+app = Server()
+
+@app.route("/price/{symbol}")
+async def price(req):
+    key = f"price:{req.params['symbol'].upper()}"
+    cached = await cache.client.get(key)
+    if cached is not None:
+        return Response(200, cached.decode("utf-8"))
+    value = "42.00"                          # replace with a slow lookup
+    await cache.client.set(key, value, ex=60)  # expire after 60 seconds
+    return Response(200, value)
+
+async def main():
+    await cache.open()
+    await serve(app, "127.0.0.1", 8080, shutdown=[cache.close])
+
+asyncio.run(main())
+```
+
+#### SQLAlchemy 2.x
+
+```bash
+pip install "mini-aiohttp[sqlalchemy]" asyncpg
+```
+
+```python
+import asyncio
+import os
+from sqlalchemy import text
+from mini_aiohttp import Response, Server, serve
+from mini_aiohttp.db import SQLAlchemyEngine
+
+db = SQLAlchemyEngine(os.environ["DATABASE_URL"], pool_size=10)   # postgresql+asyncpg://...
+app = Server()
+
+@app.route("/users/{user_id}")
+async def get_user(req):
+    async with db.session() as session:
+        result = await session.execute(
+            text("SELECT name FROM users WHERE id = :id"),
+            {"id": int(req.params["user_id"])},
+        )
+        row = result.first()
+    if row is None:
+        return Response(404, "not found")
+    return Response.json({"name": row[0]})
+
+async def main():
+    await db.open()
+    await serve(app, "127.0.0.1", 8080, shutdown=[db.close])
+
+asyncio.run(main())
+```
+
+`session()` sets `expire_on_commit=False`, so objects stay readable after `commit()`. Call `db.session()` once per request, and let the `async with` block close it.
+
+#### MongoDB (motor)
+
+```bash
+pip install "mini-aiohttp[mongo]"
+```
+
+```python
+import asyncio
+import os
+from mini_aiohttp import Request, Response, Server, serve
+from mini_aiohttp.db import MongoDatabase
+
+mongo = MongoDatabase(os.environ.get("MONGO_URI", "mongodb://localhost:27017"), "app")
+app = Server()
+
+@app.route("/notes", method="POST")
+async def add_note(req: Request):
+    result = await mongo.db["notes"].insert_one({"text": req.json()["text"]})
+    return Response.json({"id": str(result.inserted_id)}, status=201)
+
+@app.route("/notes")
+async def list_notes(req: Request):
+    cursor = mongo.db["notes"].find({}, {"_id": 0}).limit(50)
+    return Response.json([doc async for doc in cursor])
+
+async def main():
+    await mongo.open()
+    await serve(app, "127.0.0.1", 8080, shutdown=[mongo.close])
+
+asyncio.run(main())
+```
+
+#### Firebase Realtime Database (REST, no extra)
+
+This adapter calls the Realtime Database REST API through a `ClientSession`. Nothing extra needs to be installed.
+
+```python
+import asyncio
+import os
+from mini_aiohttp import ClientSession, Request, Response, Server, serve
+from mini_aiohttp.db import FirebaseError, FirebaseRTDB
+
+app = Server()
+session = ClientSession()
+firebase = FirebaseRTDB(
+    session,
+    os.environ["FIREBASE_URL"],               # https://<project>-default-rtdb.firebaseio.com
+    auth_token=os.environ.get("FIREBASE_TOKEN"),
+)
+
+@app.route("/users/{user_id}")
+async def get_user(req: Request):
+    try:
+        user = await firebase.get(f"users/{req.params['user_id']}")
+    except FirebaseError as exc:
+        return Response(502, f"upstream error {exc.status}")
+    if user is None:
+        return Response(404, "not found")
+    return Response.json(user)
+
+@app.route("/users/{user_id}", method="PUT")
+async def put_user(req: Request):
+    await firebase.put(f"users/{req.params['user_id']}", req.json())
+    return Response.json({"ok": True})
+
+@app.route("/events", method="POST")
+async def add_event(req: Request):
+    created = await firebase.push("events", req.json())   # {"name": generated_key}
+    return Response.json(created, status=201)
+
+async def main():
+    await serve(app, "127.0.0.1", 8080, shutdown=[session.close])
+
+asyncio.run(main())
+```
+
+- `get`, `put` (replaces), `patch` (merges), `push` (appends with a generated key), and `delete` are available.
+- `auth_token` is an ID token or a database secret. Errors raise `FirebaseError` with `.status` only, so the token does not appear in logs.
+- `database_url` must start with `https://`.
+
+#### Using several databases together
+
+```python
+async def main():
+    await db.open()
+    await cache.open()
+    await serve(app, "0.0.0.0", 8080, grace=10,
+                shutdown=[cache.close, db.close])   # runs in the order listed
+
+asyncio.run(main())
+```
+
+Close consumers before the things they depend on. For example, close a cache that writes to the database before you close the database.
+
+### Authentication and CSRF
+
+These helpers are middleware or route middleware. Each one returns a function you pass to `app.middleware_(...)` or `@route_middleware(...)`.
+
+#### CSRF protection
+
+```python
+import os
+from mini_aiohttp import Response, Server, csrf_protect
+
+app = Server()
+app.middleware_(csrf_protect(secret=os.environ["CSRF_SECRET"]))   # at least 32 bytes
+
+@app.route("/form")
+async def form(req):
+    return Response(200, (
+        '<form method="post" action="/save">'
+        f'<input type="hidden" name="csrf_token" value="{req.csrf_token}">'
+        '<input name="title"><button>Save</button></form>'
+    ))
+
+@app.route("/save", method="POST")
+async def save(req):
+    return Response.json({"saved": True})   # reached only with a valid token
+```
+
+- Each visitor gets a signed random token in an HttpOnly, SameSite=Lax cookie. `req.csrf_token` gives you the value for templates.
+- POST, PUT, PATCH and DELETE must send the same token in the `X-CSRF-Token` header, or in a form field named `csrf_token`. Otherwise they get 403.
+- Form fields are read only for `application/x-www-form-urlencoded` bodies. For multipart forms, send the token in the header.
+- Options: `cookie_name`, `header_name`, `form_field`, `max_age` (default one day), `secure` and `samesite`.
+
+For JavaScript clients, read the token from the page and send it in the header:
+
+```javascript
+fetch("/save", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+  body: JSON.stringify({ title: "x" }),
+});
+```
+
+#### HTTP Basic authentication
+
+```python
+import os
+from mini_aiohttp import Response, Server, basic_auth, route_middleware
+
+app = Server()
+
+@app.route("/admin")
+@route_middleware(basic_auth({"admin": os.environ["ADMIN_PASSWORD"]}, realm="Admin"))
+async def admin(req):
+    return Response.json({"hello": req.user})   # set on success
+```
+
+- Failures get 401 with `WWW-Authenticate: Basic realm="..."`.
+- Passwords are stored as SHA-256 digests and compared with `hmac.compare_digest`. A wrong username takes the same work as a wrong password.
+- To check against a database instead of a dict, pass `verify=`:
+
+```python
+async def check_login(user, password):   # must return a bool
+    ...
+
+```
+
+Note: the `verify` callable is called synchronously. For a database lookup, check the password in a cache or pass a sync function. Basic auth is only safe over HTTPS.
+
+#### API key authentication
+
+```python
+import os
+from mini_aiohttp import Response, Server, api_key_auth, route_middleware
+
+app = Server()
+KEYS = os.environ["API_KEYS"].split(",")
+
+@app.route("/api/items")
+@route_middleware(api_key_auth(KEYS))
+async def items(req):
+    return Response.json([{"id": 1}])
+```
+
+- Keys are read from the `X-API-Key` header only. Keys in URLs are not accepted, because URLs end up in logs.
+- Pass `header="X-Token"` to change the header name, or `verify=fn(key) -> bool` to check against a store.
+- Every configured key is checked in constant time, so timing does not show which key matched.
+- Missing or wrong keys get 401.
+
+### Running behind Cloudflare
+
+Behind Cloudflare, `req.client` is the Cloudflare edge address, not the visitor's address. Without a fix, every visitor shares one rate-limit bucket.
+
+```python
+from mini_aiohttp import RateLimiter, Server, cloudflare_client_ip
+
+app = Server()
+app.middleware_(cloudflare_client_ip())                 # must come first
+app.middleware_(RateLimiter(rate=5.0, burst=15).middleware())
+```
+
+- `CF-Connecting-IP` is read only when the TCP peer is inside Cloudflare's published ranges (`CLOUDFLARE_NETWORKS`, from https://www.cloudflare.com/ips/).
+- A request that reaches your server directly keeps its own address, so a client cannot fake the header to pick an IP.
+- A missing or malformed header leaves `req.client` unchanged.
+- The original peer address is kept in `req.peer_address`.
+- Options: `networks=` (a list of CIDR strings) and `header=` (default `cf-connecting-ip`).
+
+**Lock the origin to Cloudflare.** Allow inbound traffic only from Cloudflare's ranges at your firewall. Then the trust check is also enforced by the network.
+
+Cloudflare changes its ranges occasionally. Update `CLOUDFLARE_NETWORKS` in a new release, or pass `networks=` with the current list.
+
+If you use another proxy (Nginx, a load balancer), the same idea applies. The library does not read `X-Forwarded-For`, because a client can set that header itself. Use your proxy's real-IP setting, or ask for trusted-proxy support.
+
+---
+
 ## 📖 API Reference
 
 Everything below is exported from the top-level package (`from mini_aiohttp import ...`) unless a module path is given. `mini_aiohttp.__version__` holds the package version string.
@@ -351,9 +828,9 @@ Server(*, max_connections=100_000, read_timeout=15.0, max_body_size=10 * 1024 * 
 | Method or property | Purpose |
 |---|---|
 | `route(path, method="GET")` | Decorator that registers a handler. Use `{name}` for path parameters, available as `req.params`. Literal routes take priority over parameterized ones. The first registration of the same method and path wins. |
-| `websocket(path)` | Decorator that registers a WebSocket endpoint on the HTTP port. The handler is `async def handler(ws, req)`. See the WebSocket endpoints section below. |
+| `websocket(path)` | Decorator that registers a WebSocket endpoint on the HTTP port. The handler is `async def handler(ws, req)`. See WebSocket endpoints below. |
 | `middleware_(fn)` | Registers `async def fn(req, call_next)`. Middleware runs for every HTTP request, including 404, 405 and static files. It does not run for WebSocket connections. |
-| `static(prefix, directory, *, max_file_size=50 * 1024 * 1024)` | Serves files under `prefix` with the built-in static handler (GET and HEAD only, no Range). Paths must stay inside `directory`, so `..` and symlinks cannot escape it. Files are streamed in 64 KiB chunks. Larger files get 413. For Range and ETag support, use `StaticFiles` (below). |
+| `static(prefix, directory, *, max_file_size=50 * 1024 * 1024)` | Serves files under `prefix` with the built-in static handler (GET and HEAD only, no Range). Paths must stay inside `directory`, so `..` and symlinks cannot escape it. Files are streamed in 64 KiB chunks. Larger files get 413. For Range and ETag support, use `StaticFiles`. |
 | `start(host="127.0.0.1", port=8080, *, reuse_port=False, ssl=None)` | Starts listening. Pass an `ssl.SSLContext` (server side) to serve HTTPS. Returns the asyncio server. |
 | `serve_forever(host="127.0.0.1", port=8080, **kwargs)` | Starts and runs until cancelled. |
 | `close(*, grace=5.0)` | Stops accepting connections, lets in-flight requests finish for up to `grace` seconds, then closes the rest. Does not raise on slow shutdown. |
@@ -363,6 +840,8 @@ Server(*, max_connections=100_000, read_timeout=15.0, max_body_size=10 * 1024 * 
 Handlers may return a `Response`, or a `str` or `bytes` value, which is sent as a 200 response.
 
 HEAD requests are answered by the matching GET route (the body is dropped and `Content-Length` reports the GET body length). Static files also answer HEAD.
+
+To run the server with signal handling and ordered shutdown, use `serve()` (see the Guides section).
 
 **Server responses and limits:**
 
@@ -393,13 +872,16 @@ Passed to every handler and middleware.
 | `headers` | Dict with lowercase header names. |
 | `body` | Request body as bytes (decoded from chunked encoding if needed). |
 | `params` | Path parameters from `{name}` segments. |
-| `client` | Peer IP address as a string, or `None`. |
+| `client` | Peer IP address as a string, or `None`. Changed by `cloudflare_client_ip()` when the peer is Cloudflare. |
+| `peer_address` | The TCP peer address, set by `cloudflare_client_ip()`. |
 | `text()` | Body decoded as UTF-8. |
 | `json()` | Body parsed as JSON. Raises `ValueError` on invalid input. |
 | `query_params()` | Query string as `{name: [values]}`, blanks kept. |
 | `form()` | Parsed `multipart/form-data` body as `{name: [str or UploadedFile, ...]}`. Raises `ValueError` on bad bodies, so catch it and return 400. |
 | `session` | Set by `SessionMiddleware`. A dict-like `Session`. |
-| `user`, `model` | Set by the `jwt_auth` and `validated_json` extras. |
+| `csrf_token` | Set by `csrf_protect()`. The token to put in forms. |
+| `user` | Set by `basic_auth()` (the username), and by the `jwt_auth` extra (the claims). |
+| `model` | Set by the `validated_json` extra. |
 
 The server does not parse cookies. Read them from `req.headers["cookie"]`, or use `SessionMiddleware`.
 
@@ -422,7 +904,7 @@ On the client side, a `Response` also has `status`, `headers` (lowercase names),
 ### Static files: `StaticFiles`
 
 ```python
-from mini_aiohttp.static import StaticFiles
+from mini_aiohttp import StaticFiles
 
 StaticFiles(prefix, directory, *, max_file_size=50 * 1024 * 1024, cache_control="public, max-age=3600")
 ```
@@ -529,8 +1011,6 @@ ASGIApp(server, *, on_startup=None, on_shutdown=None)
 | Limits | Request-line length, header count, idle timeout and connection cap are enforced by the ASGI server, not by `Server`. `max_body_size` still applies. |
 | Statistics | Requests served through `ASGIApp` are counted in `server.stats`. |
 
-Example:
-
 ```python
 from mini_aiohttp import ASGIApp, Response, Server
 
@@ -541,10 +1021,10 @@ async def user(req):
     return Response.json({"id": req.params["user_id"]})
 
 async def open_resources():
-    ...  # e.g. create a database pool
+    ...   # e.g. create a database pool
 
 async def close_resources():
-    ...  # e.g. close it
+    ...   # e.g. close it
 
 asgi_app = ASGIApp(server, on_startup=open_resources, on_shutdown=close_resources)
 ```
@@ -554,7 +1034,7 @@ asgi_app = ASGIApp(server, on_startup=open_resources, on_shutdown=close_resource
 ```python
 ClientSession(
     *, timeout=10.0, connect_timeout=5.0, max_per_host=1000, max_idle_per_host=100,
-    max_response_size=1 GiB, max_redirects=10, retries=0,
+    max_response_size=1 << 30, max_redirects=10, retries=0,
     retry_statuses=(429, 502, 503, 504), backoff=0.5, cookies=True,
     ssl_context=None, proxy=None, dns_cache_ttl=300.0,
     on_request=(), on_response=(), user_agent="mini-aiohttp",
@@ -592,9 +1072,36 @@ Use it as an async context manager, or call `close()` yourself.
 - `on_request` hooks are called as `hook(method, url, headers)`, and may be async. `on_response` hooks are called as `hook(response)`, and may be async.
 - Connection pooling is per host, port and scheme. The DNS cache uses `dns_cache_ttl` seconds (0 disables it).
 
+```python
+import asyncio
+from mini_aiohttp import ClientSession
+
+async def main():
+    async with ClientSession(timeout=5, retries=2) as session:
+        # JSON request
+        r = await session.post("https://api.example.com/items", json={"name": "a"})
+        print(r.status, r.json())
+
+        # Form plus file upload
+        r = await session.request(
+            "POST", "https://api.example.com/upload",
+            form={"title": "photo"},
+            files={"file": ("a.png", open("a.png", "rb").read(), "image/png")},
+        )
+
+        # Streamed download
+        r = await session.get("https://example.com/big.bin", stream=True)
+        async for chunk in r.iter_chunks():
+            ...
+
+asyncio.run(main())
+```
+
 ### AutoClientSession
 
 ```python
+from mini_aiohttp import AutoClientSession
+
 AutoClientSession(*, timeout=10.0, ssl_context=None, **client_options)
 ```
 
@@ -659,6 +1166,7 @@ headers = merge_headers({"Accept": "application/json"}, rotator.next(), {"X-Debu
 ### Webhooks: `WebhookRouter`
 
 ```python
+import os
 from mini_aiohttp import Server, WebhookRouter
 
 async def on_update(update: dict) -> None:
@@ -676,6 +1184,8 @@ await router.close()
 - A valid update gets 200 `{"ok": true}` at once. The handler runs in a background task.
 - Recent `update_id` values are remembered for `dedupe_ttl` seconds (default 1 hour, up to `dedupe_size` entries). A repeat gets 200 with `"duplicate": true` and is not dispatched again.
 - Handler errors are logged and never reach the client. At most `max_tasks` handlers run at once. Beyond that the webhook answers 503 and Telegram retries later.
+
+For Telegram specifically, prefer `TelegramWebhook` (see the Guides section), which also manages the webhook through the Bot API.
 
 ### Telegram polling: `TelegramPoller`
 
@@ -718,7 +1228,7 @@ items = response.json()
 
 `response.json()` parses the body of a response you received. `Response.json(data, status=200)` still builds a JSON response on the server, and the same name works both ways. Parsing a streamed body needs `await response.aread()` first.
 
-### Cookies
+### Cookies: `CookieJar`
 
 ```python
 from mini_aiohttp import CookieJar
@@ -729,6 +1239,8 @@ from mini_aiohttp import CookieJar
 ### WebSocket endpoints on the HTTP port
 
 ```python
+from mini_aiohttp import Server
+
 app = Server()
 
 @app.websocket("/ws/{room}")
@@ -824,6 +1336,7 @@ Message compression (permessage-deflate, RFC 7692) is offered by default. Pass `
 ### AI chat helper (`mini_aiohttp.ai`)
 
 ```python
+import os
 from mini_aiohttp import ClientSession, groq, gemini, openrouter, ollama, ChatClient, AIError
 ```
 
@@ -992,14 +1505,10 @@ async def stream(req):
 
     return Response.stream(
         generate(),
-        headers={
-            "Content-Type": "text/plain"
-        }
+        headers={"Content-Type": "text/plain"}
     )
 
-asyncio.run(
-    app.serve_forever("127.0.0.1", 8080)
-)
+asyncio.run(app.serve_forever("127.0.0.1", 8080))
 ```
 
 Supports HTTP/1.1 chunked response transfer.
@@ -1086,9 +1595,13 @@ python -m twine check dist/*
 | Static files | `StaticFiles`: Range (single and multi-range), ETag, Last-Modified, conditional GET |
 | Sessions | `SessionMiddleware`: signed cookies, HMAC-SHA256 |
 | Forms and templates | `parse_urlencoded`, `Template`, `TemplateLoader` |
+| Auth and CSRF | `csrf_protect`, `basic_auth`, `api_key_auth` |
+| Proxies and Cloudflare | `cloudflare_client_ip`; SOCKS5, Tor, HTTP CONNECT |
+| Background work | `BackgroundTasks`, `TaskQueue`, `serve()` with ordered shutdown |
+| Route limits | `route_middleware`, `route_limit` |
 | Retries | `RetryPolicy`: 429 and 502/503/504 with Retry-After and jittered backoff |
-| SOCKS5 and Tor | Yes, HTTP targets; `tor_proxy()` preset |
-| Webhooks and Telegram | `WebhookRouter`, `TelegramPoller` |
+| Webhooks and Telegram | `TelegramWebhook`, `WebhookRouter`, `TelegramPoller` |
+| Databases | `PostgresPool` (asyncpg), `RedisClient`, `SQLAlchemyEngine`, `MongoDatabase` (motor), `FirebaseRTDB` (REST) |
 | AI chat | `ChatClient` and presets for Groq, Gemini, OpenRouter, Ollama |
 | HTTP/2 | Optional adapters (`HTTP2Client`, `HTTP2Server`): pooled client, parallel streams, limits, graceful close |
 | HTTP/3 | Optional adapters (`HTTP3Client`, `HTTP3Server`): pooled client, parallel streams, limits, graceful close |
@@ -1112,8 +1625,10 @@ python -m twine check dist/*
 - The template engine has no loops, conditions or template inheritance. Use Python for logic.
 - No automatic multi-process worker manager is included. Use your ASGI server's worker options (for example `uvicorn --workers`) with `ASGIApp`.
 - WebSockets are not available through `ASGIApp`. Use `Server.websocket` on the built-in server, or run `WebSocketServer` on its own port.
-- `TelegramPoller` and `WebhookRouter` do not handle Telegram's file downloads or payment flows. They only deliver updates to your handler.
+- `TelegramPoller`, `TelegramWebhook` and `WebhookRouter` deliver updates to your handler. They do not handle Telegram's file downloads or payment flows.
 - `ChatClient` is a thin OpenAI-compatible client. It does not handle provider-specific features such as tool calling or file uploads.
+- Basic auth and CSRF helpers are for simple apps. Use HTTPS in production, and treat `verify=` callbacks as synchronous.
+- `TaskQueue` keeps jobs in memory. Jobs that have not run are lost if the process stops. Use a database or Redis queue for jobs that must survive a restart.
 
 Additional notes:
 
@@ -1122,7 +1637,7 @@ Additional notes:
 - `max_response_size` limits encoded and decoded response sizes. Gzip/deflate use zlib's bounded-output API; Brotli's Python decoder has no output-length parameter, so its output is checked after each decoder call rather than hard-capped during allocation.
 - HTTPS proxy tunnels require a CONNECT-capable HTTP proxy or SOCKS5 proxy.
 - Streaming responses require asynchronous iterables.
-- Under `ASGIApp`, the ASGI server enforces the request-line, header-count and keep-alive limits from the first table above. `max_connections` and `read_timeout` on `Server` apply only to the built-in `start()` and `serve_forever()` path.
+- Under `ASGIApp`, the ASGI server enforces the request-line, header-count and keep-alive limits from the server limits table. `max_connections` and `read_timeout` on `Server` apply only to the built-in `start()` and `serve_forever()` path.
 - Prebuilt wheels are not published for Linux aarch64, 32-bit platforms or musl Linux. Those platforms install from the source distribution.
 
 ---
@@ -1130,7 +1645,6 @@ Additional notes:
 ## 📚 Links
 
 - **PyPI Package:** https://pypi.org/project/mini-aiohttp/
-- **Feature guide:** [docs/features.md](docs/features.md)
 
 ---
 
@@ -1140,6 +1654,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**mini-aiohttp v1.2.1**
+**mini-aiohttp v1.4.1**
 
 *Lightweight. Asynchronous. Flexible.*
