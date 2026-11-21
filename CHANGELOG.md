@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+- `cloudflare_client_ip()` (`mini_aiohttp.client_ip`): when the TCP peer is inside Cloudflare's published ranges, `req.client` is set from the `CF-Connecting-IP` header. Requests that reach the origin directly keep their peer address, so the header cannot be forged. The original peer is kept in `req.peer_address`.
+- `CLOUDFLARE_NETWORKS`: Cloudflare's IPv4 and IPv6 ranges. `networks=` and `header=` can be overridden.
+- `docs/behind-cloudflare.md`: setup, and a note on locking the origin to Cloudflare's ranges at the firewall.
+
+### Notes
+- Put `cloudflare_client_ip()` before `RateLimiter` so the limiter counts real visitors.
+- The Cloudflare ranges were taken from https://www.cloudflare.com/ips/ at release time. Update them when Cloudflare changes them.
+- The README version badge is updated in a follow-up.
+
 ## 1.3.0
 
 ### Added
