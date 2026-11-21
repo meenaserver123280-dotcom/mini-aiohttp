@@ -6,6 +6,7 @@ from .auth import api_key_auth, basic_auth, csrf_protect
 from .auto import AutoClientSession
 from .batch import fetch_all, gather_requests
 from .client import ClientError, ClientSession
+from .client_ip import CLOUDFLARE_NETWORKS, cloudflare_client_ip
 from .compression import gzip_middleware
 from .cookies import CookieJar
 from .db import FirebaseError, FirebaseRTDB, MongoDatabase, PostgresPool, RedisClient, SQLAlchemyEngine
@@ -47,4 +48,5 @@ __all__ = [
     "PostgresPool", "RedisClient", "SQLAlchemyEngine", "MongoDatabase",
     "FirebaseRTDB", "FirebaseError",
     "csrf_protect", "basic_auth", "api_key_auth",
+    "cloudflare_client_ip", "CLOUDFLARE_NETWORKS",
 ]
